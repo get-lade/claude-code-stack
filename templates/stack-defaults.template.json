@@ -1,0 +1,32 @@
+{
+  "$schema": "../schemas/stack-defaults-schema.json",
+  "stack_version": "1.1.0",
+  "user_name": "<prompted-at-install>",
+  "user_email": "<prompted-at-install>",
+  "additional_directories": [],
+  "default_tier": 2,
+  "default_orchestration_mode": "main-thread",
+  "default_strict_mode": true,
+  "default_domain_mode": null,
+  "default_sensitivity_level": "normal",
+  "default_cost_protection": {
+    "per_session_alert_usd": 5.00,
+    "per_day_alert_usd": 50.00,
+    "per_session_hard_cap_usd": null
+  },
+  "supabase": {
+    "project_ref": "<prompted-at-install>",
+    "url": "<prompted-at-install>"
+  },
+  "providers": {
+    "anthropic_key_keychain_item": "anthropic-api-key",
+    "openai_key_keychain_item": "openai-api-key",
+    "google_ai_key_keychain_item": "google-ai-api-key"
+  },
+  "review_pass": {
+    "required_for_handoffs": true,
+    "required_for_specs": true,
+    "required_for_audit_reports": true,
+    "required_for_design_docs": true
+  }
+}

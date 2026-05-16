@@ -1,0 +1,43 @@
+{
+  "tier": 1,
+  "name": "Discipline",
+  "description": "Plan, cost-gate, validate-output, review-handoff skills. Includes defaults system and shortcut skills.",
+  "extends": "tier-0",
+  "files": {
+    "global": [
+      { "from": "skills/plan/SKILL.md", "to": "~/.claude/skills/plan/SKILL.md" },
+      { "from": "skills/cost-gate/SKILL.md", "to": "~/.claude/skills/cost-gate/SKILL.md" },
+      { "from": "skills/coverage-snapshot/SKILL.md", "to": "~/.claude/skills/coverage-snapshot/SKILL.md" },
+      { "from": "skills/validate-output/SKILL.md", "to": "~/.claude/skills/validate-output/SKILL.md" },
+      { "from": "skills/project-init/SKILL.md", "to": "~/.claude/skills/project-init/SKILL.md" },
+      { "from": "skills/review-handoff/SKILL.md", "to": "~/.claude/skills/review-handoff/SKILL.md" },
+      { "from": "skills/default-settings/SKILL.md", "to": "~/.claude/skills/default-settings/SKILL.md" },
+      { "from": "skills/default-edit/SKILL.md", "to": "~/.claude/skills/default-edit/SKILL.md" },
+      { "from": "skills/agent-teams/SKILL.md", "to": "~/.claude/skills/agent-teams/SKILL.md" },
+      { "from": "skills/strict-mode/SKILL.md", "to": "~/.claude/skills/strict-mode/SKILL.md" },
+      { "from": "skills/domain-mode/SKILL.md", "to": "~/.claude/skills/domain-mode/SKILL.md" },
+      { "from": "skills/sensitivity/SKILL.md", "to": "~/.claude/skills/sensitivity/SKILL.md" },
+      { "from": "skills/cost-cap/SKILL.md", "to": "~/.claude/skills/cost-cap/SKILL.md" },
+      { "from": "skills/tier/SKILL.md", "to": "~/.claude/skills/tier/SKILL.md" },
+      { "from": "templates/stack-defaults.template.json", "to": "~/.claude/stack-defaults.json", "prompt_for_values": true }
+    ]
+  },
+  "requirements": [],
+  "smoke_tests": [
+    "test -f ~/.claude/skills/plan/SKILL.md",
+    "test -f ~/.claude/skills/cost-gate/SKILL.md",
+    "test -f ~/.claude/skills/coverage-snapshot/SKILL.md",
+    "test -f ~/.claude/skills/validate-output/SKILL.md",
+    "test -f ~/.claude/skills/project-init/SKILL.md",
+    "test -f ~/.claude/skills/review-handoff/SKILL.md",
+    "test -f ~/.claude/skills/default-settings/SKILL.md",
+    "test -f ~/.claude/skills/default-edit/SKILL.md",
+    "test -f ~/.claude/skills/agent-teams/SKILL.md",
+    "test -f ~/.claude/skills/strict-mode/SKILL.md",
+    "test -f ~/.claude/skills/domain-mode/SKILL.md",
+    "test -f ~/.claude/skills/sensitivity/SKILL.md",
+    "test -f ~/.claude/skills/cost-cap/SKILL.md",
+    "test -f ~/.claude/skills/tier/SKILL.md",
+    "test -f ~/.claude/stack-defaults.json"
+  ]
+}
