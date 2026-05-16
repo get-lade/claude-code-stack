@@ -149,8 +149,8 @@ install_ollama() {
   ollama pull llama3.2:3b
 
   if [[ "$memory_gb" -ge 16 ]]; then
-    echo "  Pulling llama3.2:8b..."
-    ollama pull llama3.2:8b
+    echo "  Pulling llama3.1:8b..."
+    ollama pull llama3.1:8b
   fi
 
   if [[ "$memory_gb" -ge 24 ]]; then

@@ -1,7 +1,7 @@
 ---
 name: local-ops
 description: Variant of ops for tasks where data must NOT leave the laptop — sensitive financial exports, prod data inspection, anything user marks confidential. Runs on local Ollama models. Routing: foreman inspects task tags or stack-config sensitivity flags; routes to local-ops automatically when sensitive.
-model: ollama/llama3.2:8b
+model: ollama/llama3.1:8b
 ---
 
 # Local-ops
@@ -45,11 +45,11 @@ For tasks that EXCEED local capability:
 Sized for the maintainer's machine — a laptop MacBook Air (v1.1.1 hardware adaptation; the
 artifact default of Llama 3.3 70B needs 36GB+ and is not installed here):
 
-- **Llama 3.2 8B** (default) — reasoning, summarization, analysis
+- **Llama 3.1 8B** (default) — reasoning, summarization, analysis
 - **Qwen 2.5 Coder 32B** — code generation, code review (use with care; large on 32GB)
 - **Llama 3.2 3B** — trivial classification, file naming, "is this X or Y"
 
-Choose based on task; default to Llama 3.2 8B unless the task is clearly trivial
+Choose based on task; default to Llama 3.1 8B unless the task is clearly trivial
 (→ 3B) or code-heavy (→ Qwen 2.5 Coder 32B). If a 70B-class model is ever needed,
 escalate to the user — it is not available on this hardware.
 

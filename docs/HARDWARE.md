@@ -12,14 +12,14 @@ Without knowing the exact spec, three scenarios:
 - **Recommendation:** Tier 5 is marginally useful here. Local-ops can do trivial classification only. the maintainer would need to upgrade for meaningful local capability.
 
 ### Air with 16GB unified memory
-- **Supported:** Up to Qwen 2.5 7B, Llama 3.2 8B, comfortably. 13B with some swap.
+- **Supported:** Up to Qwen 2.5 7B, Llama 3.1 8B, comfortably. 13B with some swap.
 - **Not supported:** 32B+ models.
-- **Recommendation:** Useful for trivial-medium local tasks. Llama 3.2 8B as primary; Llama 3.2 3B for fast classification.
+- **Recommendation:** Useful for trivial-medium local tasks. Llama 3.1 8B as primary; Llama 3.2 3B for fast classification.
 
 ### Air with 24GB or higher unified memory
 - **Supported:** 13B comfortably, 32B with care (Qwen 2.5 Coder 32B fits).
 - **Not supported:** 70B (will swap heavily).
-- **Recommendation:** Real Tier 5 capability. Qwen 2.5 Coder 32B for code, Llama 3.2 8B for general.
+- **Recommendation:** Real Tier 5 capability. Qwen 2.5 Coder 32B for code, Llama 3.1 8B for general.
 
 ## Recommended: MacBook Pro M-series (the maintainer's stated potential upgrade)
 
@@ -58,7 +58,7 @@ The 16" MacBook Pro with M-series Max chip + 48GB unified memory is the recommen
 the maintainer's MacBook Air is an **M4 with 32GB unified memory**, 1TB storage. This lands
 in the "24GB or higher" bracket — **real Tier 5 capability**. Installed model set:
 - **Qwen 2.5 Coder 32B** — code (fits with care on 32GB)
-- **Llama 3.2 8B** — general reasoning (local-ops default)
+- **Llama 3.1 8B** — general reasoning (local-ops default)
 - **Llama 3.2 3B** — trivial classification
 
 Llama 3.3 70B is **not** installed — it needs 36GB+ and would swap heavily. If the maintainer
@@ -69,7 +69,7 @@ upgrades to a 36GB+ Pro, add 70B via `ollama pull llama3.3:70b` and update
 
 Ollama models are large.
 - Llama 3.2 3B: ~2GB
-- Llama 3.2 8B: ~5GB
+- Llama 3.1 8B: ~5GB
 - Qwen 2.5 Coder 32B: ~20GB
 - Llama 3.3 70B: ~42GB
 
