@@ -1,0 +1,29 @@
+{
+  "tier": 0,
+  "name": "Foundation",
+  "description": "Friction-killer hooks and handoff skills. No external API costs beyond Claude.",
+  "files": {
+    "global": [
+      { "from": "config/claude.md.global.template", "to": "~/.claude/CLAUDE.md", "merge": true },
+      { "from": "config/settings.global.template.json", "to": "~/.claude/settings.json", "merge": true },
+      { "from": "hooks/session-start-handoff.sh", "to": "~/.claude/hooks/session-start-handoff.sh", "executable": true },
+      { "from": "hooks/post-tool-tsc.sh", "to": "~/.claude/hooks/post-tool-tsc.sh", "executable": true },
+      { "from": "hooks/bulk-job-reminder.sh", "to": "~/.claude/hooks/bulk-job-reminder.sh", "executable": true },
+      { "from": "skills/handoff/SKILL.md", "to": "~/.claude/skills/handoff/SKILL.md" },
+      { "from": "skills/goodmorning/SKILL.md", "to": "~/.claude/skills/goodmorning/SKILL.md" },
+      { "from": "schemas/stack-config-schema.json", "to": "~/.claude/schemas/stack-config-schema.json" },
+      { "from": "schemas/stack-defaults-schema.json", "to": "~/.claude/schemas/stack-defaults-schema.json" }
+    ],
+    "per_repo_template": "config/claude.md.repo.template"
+  },
+  "requirements": [],
+  "smoke_tests": [
+    "test -f ~/.claude/CLAUDE.md",
+    "test -f ~/.claude/settings.json",
+    "test -x ~/.claude/hooks/session-start-handoff.sh",
+    "test -x ~/.claude/hooks/post-tool-tsc.sh",
+    "test -x ~/.claude/hooks/bulk-job-reminder.sh",
+    "test -f ~/.claude/skills/handoff/SKILL.md",
+    "test -f ~/.claude/skills/goodmorning/SKILL.md"
+  ]
+}

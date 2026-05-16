@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/bschonbrun/claude-code-stack/schemas/stack-defaults-schema.json",
+  "title": "Stack User Defaults",
+  "description": "User-global defaults for Claude Code Stack. Lives at ~/.claude/stack-defaults.json. Populated by install.sh, edited by /default-edit global.",
+  "type": "object",
+  "required": ["stack_version", "default_tier", "default_orchestration_mode", "default_strict_mode"],
+  "properties": {
+    "stack_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "user_name": { "type": "string" },
+    "user_email": { "type": "string", "format": "email" },
+    "additional_directories": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Paths added to Claude Code's permissions.additionalDirectories"
+    },
+    "default_tier": { "type": "integer", "minimum": 0, "maximum": 5, "default": 2 },
+    "default_orchestration_mode": {
+      "type": "string",
+      "enum": ["main-thread", "agent-teams", "hybrid"],
+      "default": "main-thread"
+    },
+    "default_strict_mode": { "type": "boolean", "default": true },
+    "default_domain_mode": {
+      "type": ["string", "null"],
+      "enum": ["financial-code", "schema-migration", "deploy", "ui-design", "data-operation", null],
+      "default": null
+    },
+    "default_sensitivity_level": {
+      "type": "string",
+      "enum": ["normal", "sensitive", "confidential"],
+      "default": "normal"
+    },
+    "default_cost_protection": {
+      "type": "object",
+      "properties": {
+        "per_session_alert_usd": { "type": ["number", "null"], "minimum": 0, "default": 5.00 },
+        "per_day_alert_usd": { "type": ["number", "null"], "minimum": 0, "default": 50.00 },
+        "per_session_hard_cap_usd": { "type": ["number", "null"], "minimum": 0, "default": null }
+      }
+    },
+    "supabase": {
+      "type": "object",
+      "properties": {
+        "project_ref": { "type": "string" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "properties": {
+        "anthropic_key_keychain_item": { "type": "string" },
+        "openai_key_keychain_item": { "type": "string" },
+        "google_ai_key_keychain_item": { "type": "string" }
+      }
+    },
+    "review_pass": {
+      "type": "object",
+      "properties": {
+        "required_for_handoffs": { "type": "boolean", "default": true },
+        "required_for_specs": { "type": "boolean", "default": true },
+        "required_for_audit_reports": { "type": "boolean", "default": true },
+        "required_for_design_docs": { "type": "boolean", "default": true }
+      }
+    }
+  },
+  "additionalProperties": false
+}
