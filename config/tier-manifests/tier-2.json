@@ -1,0 +1,73 @@
+{
+  "tier": 2,
+  "name": "Team",
+  "description": "Multi-agent dev team. 12 core subagents, foreman skill + foreman-team-lead, model routing, ADR + runbook skills, cost-log schema. Adversarial review (reviewer/product-critic/security-auditor) runs via the local Codex CLI — see ADR-011.",
+  "extends": "tier-1",
+  "files": {
+    "global": [
+      { "from": "agents/architect.md", "to": "~/.claude/agents/architect.md" },
+      { "from": "agents/implementer.md", "to": "~/.claude/agents/implementer.md" },
+      { "from": "agents/validator.md", "to": "~/.claude/agents/validator.md" },
+      { "from": "agents/reviewer.md", "to": "~/.claude/agents/reviewer.md" },
+      { "from": "agents/tester.md", "to": "~/.claude/agents/tester.md" },
+      { "from": "agents/documenter.md", "to": "~/.claude/agents/documenter.md" },
+      { "from": "agents/scribe.md", "to": "~/.claude/agents/scribe.md" },
+      { "from": "agents/ops.md", "to": "~/.claude/agents/ops.md" },
+      { "from": "agents/product-critic.md", "to": "~/.claude/agents/product-critic.md" },
+      { "from": "agents/designer.md", "to": "~/.claude/agents/designer.md" },
+      { "from": "agents/red-team.md", "to": "~/.claude/agents/red-team.md" },
+      { "from": "agents/security-auditor.md", "to": "~/.claude/agents/security-auditor.md" },
+      { "from": "agents/foreman-team-lead.md", "to": "~/.claude/agents/foreman-team-lead.md" },
+      { "from": "skills/foreman/SKILL.md", "to": "~/.claude/skills/foreman/SKILL.md" },
+      { "from": "skills/dispatch/SKILL.md", "to": "~/.claude/skills/dispatch/SKILL.md" },
+      { "from": "skills/adr/SKILL.md", "to": "~/.claude/skills/adr/SKILL.md" },
+      { "from": "skills/runbook/SKILL.md", "to": "~/.claude/skills/runbook/SKILL.md" },
+      { "from": "skills/design-match/SKILL.md", "to": "~/.claude/skills/design-match/SKILL.md" },
+      { "from": "skills/eval-bump/SKILL.md", "to": "~/.claude/skills/eval-bump/SKILL.md" },
+      { "from": "skills/deploy-edge/SKILL.md", "to": "~/.claude/skills/deploy-edge/SKILL.md" },
+      { "from": "config/model-routing.json", "to": "~/.claude/config/model-routing.json" },
+      { "from": "config/approval-gates.json", "to": "~/.claude/config/approval-gates.json" },
+      { "from": "config/prompt-caching.json", "to": "~/.claude/config/prompt-caching.json" },
+      { "from": "templates/ADR.template.md", "to": "~/.claude/templates/ADR.template.md" },
+      { "from": "templates/RUNBOOK.template.md", "to": "~/.claude/templates/RUNBOOK.template.md" }
+    ],
+    "schemas": [
+      { "from": "schemas/001-cost-log.sql", "apply_to_supabase": true }
+    ]
+  },
+  "requirements": [
+    { "type": "command", "name": "jq" },
+    { "type": "command", "name": "codex" },
+    { "type": "supabase_project", "name": "<your-supabase-ref>" }
+  ],
+  "smoke_tests": [
+    "test -f ~/.claude/agents/architect.md",
+    "test -f ~/.claude/agents/implementer.md",
+    "test -f ~/.claude/agents/validator.md",
+    "test -f ~/.claude/agents/reviewer.md",
+    "test -f ~/.claude/agents/tester.md",
+    "test -f ~/.claude/agents/documenter.md",
+    "test -f ~/.claude/agents/scribe.md",
+    "test -f ~/.claude/agents/ops.md",
+    "test -f ~/.claude/agents/product-critic.md",
+    "test -f ~/.claude/agents/designer.md",
+    "test -f ~/.claude/agents/red-team.md",
+    "test -f ~/.claude/agents/security-auditor.md",
+    "test -f ~/.claude/agents/foreman-team-lead.md",
+    "test -f ~/.claude/skills/foreman/SKILL.md",
+    "test -f ~/.claude/skills/dispatch/SKILL.md",
+    "test -f ~/.claude/skills/adr/SKILL.md",
+    "test -f ~/.claude/skills/runbook/SKILL.md",
+    "test -f ~/.claude/skills/design-match/SKILL.md",
+    "test -f ~/.claude/skills/eval-bump/SKILL.md",
+    "test -f ~/.claude/skills/deploy-edge/SKILL.md",
+    "test -f ~/.claude/config/model-routing.json",
+    "test -f ~/.claude/config/approval-gates.json",
+    "test -f ~/.claude/config/prompt-caching.json",
+    "test -f ~/.claude/templates/ADR.template.md",
+    "test -f ~/.claude/templates/RUNBOOK.template.md",
+    "command -v codex"
+  ],
+  "manifest_format_note": "Tier-2 manifest uses the same files.global / from-to / smoke_tests format as tier 0, 1, 3, 4, 5 and the install.sh / verify.sh scripts. Artifact 3's draft used a divergent installs.* / src-dest / verify structure that the installer does not read — corrected here for consistency. See Tier 2 install log.",
+  "codex_note": "Artifact 3's tier-2 manifest required Keychain item `openai-api-key`. Per the maintainer's decision (2026-05-16, ADR-011), OpenAI-family work routes through the local Codex CLI instead — the requirement is now `command: codex`."
+}

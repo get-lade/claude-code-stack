@@ -1,0 +1,104 @@
+{
+  "version": "1.1.1",
+  "last_audited": "2026-05-16",
+  "next_audit_due": "2026-06-16",
+  "verification_note": "Model IDs and pricing verified 2026-05-15. /model-audit re-verifies monthly. Verify live before any cost-sensitive operation.",
+  "providers": {
+    "anthropic": {
+      "api_key_keychain": "anthropic-api-key",
+      "base_url": "https://api.anthropic.com",
+      "models": {
+        "claude-opus-4-7": {
+          "api_model_id": "claude-opus-4-7",
+          "context_window": 1000000,
+          "max_output": 128000,
+          "supports_caching": true,
+          "pricing_per_million_input": 5.00,
+          "pricing_per_million_output": 25.00,
+          "pricing_verified_date": "2026-05-15"
+        },
+        "claude-sonnet-4-6": {
+          "api_model_id": "claude-sonnet-4-6",
+          "context_window": 1000000,
+          "max_output": 64000,
+          "supports_caching": true,
+          "pricing_per_million_input": 3.00,
+          "pricing_per_million_output": 15.00,
+          "pricing_verified_date": "2026-05-15"
+        },
+        "claude-haiku-4-5-20251001": {
+          "api_model_id": "claude-haiku-4-5-20251001",
+          "context_window": 200000,
+          "supports_caching": true,
+          "pricing_per_million_input": 1.00,
+          "pricing_per_million_output": 5.00,
+          "pricing_verified_date": "2026-05-15"
+        }
+      }
+    },
+    "codex": {
+      "invocation": "local Codex CLI — `codex exec` (general) / `codex exec review` (code review)",
+      "auth": "~/.codex/auth.json (Codex CLI login — NOT a Keychain item)",
+      "underlying_model": "gpt-5.5 (OpenAI GPT-5.5 family, accessed via Codex)",
+      "supports_caching": false,
+      "pricing_note": "the maintainered via the Codex CLI account, not the stack's API metering. Codex calls are not metered into cost_log.",
+      "notes": "v1.1.1 adaptation: the stack reaches the OpenAI / GPT-5.5 family through the locally-installed, authenticated Codex CLI rather than a direct OpenAI API key. Claude Code cannot run subagents on non-Claude models, so adversarial roles (reviewer, product-critic, security-auditor) run on a Claude model and orchestrate Codex via bash. Replaces the artifacts' `openai` provider block. See ADR-011."
+    },
+    "google": {
+      "api_key_keychain": "google-ai-studio-api-key",
+      "base_url": "https://generativelanguage.googleapis.com",
+      "models": {
+        "gemini-2.5-pro": {
+          "api_model_id": "gemini-2.5-pro",
+          "context_window": 1000000,
+          "supports_caching": true,
+          "pricing_per_million_input": 1.25,
+          "pricing_per_million_output": 10.00,
+          "pricing_verified_date": "2026-05-15",
+          "notes": "Gemini 3.1 Pro (2M context) is available — consider migration in next /model-audit. Tier 3 provider; no Google key configured as of 2026-05-16."
+        }
+      }
+    },
+    "ollama": {
+      "base_url": "http://localhost:11434",
+      "models": {
+        "llama-3.2-3b": { "context_window": 128000 },
+        "qwen-2.5-coder-7b": { "context_window": 32768 },
+        "llama-3.3-70b": { "context_window": 128000 }
+      }
+    }
+  },
+  "subagent_assignments": {
+    "architect": { "primary": "anthropic/claude-opus-4-7" },
+    "implementer": { "primary": "anthropic/claude-sonnet-4-6", "escalation": "anthropic/claude-opus-4-7" },
+    "validator": { "primary": "anthropic/claude-sonnet-4-6", "escalation": "anthropic/claude-opus-4-7" },
+    "reviewer": { "primary": "codex/gpt-5.5", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: adversarial review via local Codex CLI — see ADR-011." },
+    "tester": { "primary": "anthropic/claude-sonnet-4-6" },
+    "documenter": { "primary": "anthropic/claude-sonnet-4-6" },
+    "scribe": { "primary": "anthropic/claude-haiku-4-5-20251001" },
+    "ops": { "primary": "anthropic/claude-haiku-4-5-20251001", "escalation": "anthropic/claude-sonnet-4-6" },
+    "product-critic": { "primary": "codex/gpt-5.5", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: product critique via local Codex CLI — see ADR-011." },
+    "designer": { "primary": "anthropic/claude-opus-4-7" },
+    "red-team": { "primary": "google/gemini-2.5-pro", "notes": "Tier 3 provider. Same Claude-Code-cannot-run-non-Claude-subagents issue as the Codex roles; Gemini integration unresolved as of Tier 2 — to be addressed in Session 5 (Tier 3)." },
+    "security-auditor": { "primary": "codex/gpt-5.5", "second_pass": "anthropic/claude-opus-4-7", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: primary audit via local Codex CLI; belt-and-suspenders Opus second pass on novel crypto/auth — see ADR-011." },
+    "performance-engineer": { "primary": "anthropic/claude-opus-4-7" },
+    "data-engineer": { "primary": "anthropic/claude-opus-4-7" },
+    "integration-specialist": { "primary": "anthropic/claude-sonnet-4-6" },
+    "incident-commander": { "primary": "anthropic/claude-opus-4-7" },
+    "architecture-critic": { "primary": "google/gemini-2.5-pro" },
+    "accessibility-auditor": { "primary": "anthropic/claude-sonnet-4-6" },
+    "historian": { "primary": "google/gemini-2.5-pro" },
+    "librarian": { "primary": "anthropic/claude-haiku-4-5-20251001" },
+    "estimator": { "primary": "anthropic/claude-sonnet-4-6" },
+    "foreman-team-lead": { "primary": "anthropic/claude-opus-4-7", "notes": "v1.1: Used in agent-teams orchestration mode only. Main-thread mode uses foreman as a skill — no subagent invocation." },
+    "local-ops": { "primary": "ollama/qwen-2.5-coder-7b" }
+  },
+  "notes": [
+    "v1.1.1 change: OpenAI/GPT-5.5-family work routes through the local Codex CLI (provider `codex`), not a direct OpenAI API key. reviewer, product-critic, security-auditor run on a Claude model and orchestrate Codex. See ADR-011.",
+    "v1.1 change: Foreman is a skill (skills/foreman/SKILL.md) in main-thread orchestration mode. Only in agent-teams mode is foreman a separate session (team-lead role).",
+    "Pricing verified against vendor docs on 2026-05-15. Anthropic: platform.claude.com. Google: ai.google.dev. Apr 2026 friction was a 3.4x cost underforecast — verify live before any cost-sensitive operation.",
+    "/model-audit skill (Tier 4) re-verifies monthly and proposes changes.",
+    "red-team and architecture-critic and historian use Gemini 2.5 Pro. No Google key is configured as of 2026-05-16; Gemini integration is a Tier 3 (Session 5) decision.",
+    "Gemini 3.1 Pro (2M context, released Feb 2026) is a migration candidate for architecture-critic, historian. Flagged for next /model-audit."
+  ]
+}
