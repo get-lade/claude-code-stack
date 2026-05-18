@@ -33,7 +33,7 @@ For a new human contributor (or me, after a long break).
 
 ## Project-specific quirks
 
-<List the genuinely surprising things. E.g., "Migrations live in `bschonbrun/app-repo` repo even though they affect this repo — historical reason.">
+<List the genuinely surprising things. E.g., "Migrations live in `acme/api` repo even though they affect this repo — historical reason.">
 
 ## Who to ask
 

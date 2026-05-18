@@ -1,6 +1,6 @@
 ---
 name: eval-bump
-description: Improve evaluation suites (golden sets, classifiers, NL→SQL accuracy). Used heavily for app-repo's NL→SQL engine — synthesize failure-mode goldens from production traffic, propose patches, A/B against the full suite, only PR when score strictly improves. Generic enough to apply to any eval-driven workflow.
+description: Improve evaluation suites (golden sets, classifiers, NL→SQL accuracy). Used heavily for NL→SQL evaluation work — synthesize failure-mode goldens from production traffic, propose patches, A/B against the full suite, only PR when score strictly improves. Generic enough to apply to any eval-driven workflow.
 ---
 
 # /eval-bump

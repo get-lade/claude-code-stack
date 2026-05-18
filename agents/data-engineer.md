@@ -56,7 +56,7 @@ Data-engineer → reviewer (with the data-engineering report as part of the revi
 ## Failure modes
 
 - Treats Supabase like ad-hoc updates. It's not. Schema changes deserve production migration rigor.
-- Ignores downstream consumers. the maintainer's 7 repos share a schema. A change in app-repo's migrations affects finance-sync-repo, dashboards-repo, etc.
+- Ignores downstream consumers. Repos that share a schema are coupled — a change in one repo's migrations can break every other repo that reads those tables.
 - Skips rollback. "It'll be fine" is not a plan.
 
 ## Boundaries

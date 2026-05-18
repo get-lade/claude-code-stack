@@ -36,17 +36,17 @@ You set direction and approve at gates; you do not micromanage routing.
 ## How each repo is configured
 
 Every repo carries `.claude/stack-config.json` — its tier and domain mode.
-You don't need to memorize these; foreman reads them. For reference:
+You don't need to memorize these; foreman reads them. A typical spread
+across repos of differing complexity:
 
-| Repo | Tier | domain_mode |
+| Repo (example) | Tier | domain_mode |
 |---|---|---|
-| security-audit-repo | 1 | — |
-| mcp-gateway-repo | 2 | — |
-| revenue-report-repo | 3 | financial-code |
-| finance-sync-repo | 3 | financial-code |
-| app-repo | 4 | financial-code |
-| data-pipeline-repo | 5 | data-operation |
-| dashboards-repo | 5 | ui-design |
+| a thin monitoring repo | 1 | — |
+| an isolated service / MCP server | 2 | — |
+| a delivery pipeline | 3 | financial-code |
+| a complex application | 4 | financial-code |
+| a bulk data pipeline | 5 | data-operation |
+| a dashboard suite | 5 | ui-design |
 
 ## Where to look when you need detail
 

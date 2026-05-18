@@ -29,7 +29,7 @@ See `.claude/stack-config.json` for the active subagents and overrides for this 
 
 Examples:
 - "Re-enrichment scripts must MERGE with existing data, never overwrite. Past regression: 90% → 34% coverage."
-- "Never write to `PIPEDREAM_EXTERNAL_USER_ID` (legacy, unsuffixed); broke app-repo's Xero backfill on 2026-05-02."
+- "Never write to `LEGACY_EXTERNAL_USER_ID` (legacy, unsuffixed); broke a downstream data backfill on 2026-05-02."
 
 ### Domain mode
 

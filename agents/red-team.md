@@ -71,8 +71,8 @@ Code under attack: <scope>
 
 ## Things I particularly look for in the maintainer's stack
 
-- SQL injection in NL→SQL paths (app-repo)
-- Cost-runaway in LLM loops (data-pipeline-repo)
+- SQL injection in NL→SQL paths
+- Cost-runaway in LLM loops
 - Race conditions in cron-triggered jobs
 - Replay attacks on webhook endpoints (whatsapp, slack-events)
 - RLS holes (tables accessible across tenants)

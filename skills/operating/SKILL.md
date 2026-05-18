@@ -43,15 +43,14 @@ You set direction and approve at gates; you do not micromanage routing.
 
 ## Per-repo configuration
 
-| Repo | Tier | domain_mode |
+| Repo (example) | Tier | domain_mode |
 |---|---|---|
-| security-audit-repo | 1 | — |
-| mcp-gateway-repo | 2 | — |
-| revenue-report-repo | 3 | financial-code |
-| finance-sync-repo | 3 | financial-code |
-| app-repo | 4 | financial-code |
-| data-pipeline-repo | 5 | data-operation |
-| dashboards-repo | 5 | ui-design |
+| a thin monitoring repo | 1 | — |
+| an isolated service / MCP server | 2 | — |
+| a delivery pipeline | 3 | financial-code |
+| a complex application | 4 | financial-code |
+| a bulk data pipeline | 5 | data-operation |
+| a dashboard suite | 5 | ui-design |
 
 ## Where to look for detail
 

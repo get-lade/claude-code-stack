@@ -20,7 +20,7 @@ create table if not exists stack.cost_log (
   description     text not null,
 
   -- Context
-  project_slug    text,             -- e.g., 'data-pipeline-repo'
+  project_slug    text,             -- e.g., 'my-project'
   session_id      text,             -- Claude Code session ID
   subagent        text,             -- which subagent if applicable
   task_type       text,             -- 'feature' | 'bug' | etc.

@@ -120,7 +120,12 @@ apply_one_schema() {
   local schema_path="$1"
 
   # Get Supabase URL + service role key from Keychain
-  local supabase_url="${SUPABASE_URL:-https://<your-supabase-ref>.supabase.co}"
+  local supabase_url="${SUPABASE_URL:-}"
+  if [[ -z "$supabase_url" ]]; then
+    echo "  [skip] SUPABASE_URL not set"
+    echo "  Set it: export SUPABASE_URL=https://<your-supabase-ref>.supabase.co"
+    return
+  fi
   local service_role_key
   service_role_key="$(security find-generic-password -s supabase-service-role-key -w 2>/dev/null || echo '')"
 

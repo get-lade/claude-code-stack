@@ -34,7 +34,7 @@ Ask these three questions in order. First "yes" wins. If none get a yes, the fri
 
 **Examples:**
 - "Sandbox can't push to main; hand off instead." → global CLAUDE.md
-- "Re-enrichment must MERGE, never overwrite." → data-pipeline-repo CLAUDE.md
+- "Re-enrichment must MERGE, never overwrite." → a data-pipeline repo CLAUDE.md
 - "Never use `supabase functions deploy` — path mismatch." → per-repo CLAUDE.md
 
 **Where it lives:** `~/.claude/CLAUDE.md` (global) or `<project>/CLAUDE.md` (per-project).
