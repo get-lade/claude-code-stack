@@ -85,7 +85,7 @@
     "librarian": { "primary": "anthropic/claude-haiku-4-5-20251001" },
     "estimator": { "primary": "anthropic/claude-sonnet-4-6" },
     "foreman-team-lead": { "primary": "anthropic/claude-opus-4-7", "notes": "v1.1: Used in agent-teams orchestration mode only. Main-thread mode uses foreman as a skill — no subagent invocation." },
-    "local-ops": { "primary": "ollama/qwen-2.5-coder-7b" }
+    "local-ops": { "primary": "ollama/qwen2.5-coder:32b", "notes": "Tier 5 local subagent. Model string must match an ollama tag that tier-installer.sh actually pulls and HARDWARE.md recommends — keep these three in sync." }
   },
   "notes": [
     "v1.1.1 change: OpenAI/GPT-5.5-family work routes through the local Codex CLI (provider `codex`); Gemini-family work routes through the local Gemini CLI (provider `gemini`). Neither uses a direct API key. Adversarial roles run on a Claude model and orchestrate the respective CLI. See ADR-011 (Codex) and ADR-012 (Gemini).",
