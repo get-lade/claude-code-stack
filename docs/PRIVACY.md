@@ -24,14 +24,24 @@ Stack additions:
 
 The scribe subagent is responsible for never including secrets in handoffs. Reviewer should also flag any leaked secrets before merge.
 
-## When opening the stack repo to the public (Phase 2)
+## Publishing a fork of this repo
 
-Before going public:
-- Scrub all ADRs, runbooks, handoffs for project-specific secrets or sensitive data.
-- Remove the maintainer-specific paths (e.g., `<home>/...`) from examples.
-- Replace Supabase project ref (`<your-supabase-ref>`) with a placeholder.
-- Audit ALL files in docs/ for accidental leaks.
-- Use `git filter-repo` or similar if needed to scrub history.
+This repo ships parameterized — no live secrets and no personal identifiers.
+If you fork it and customize it for your own work, scrub your additions
+before publishing the fork. The full surface to check:
+
+- **Secrets** — confirm no API keys, tokens, or connection strings landed in
+  any tracked file. Keep secret handling by-reference (Keychain item names).
+- **Identifiers** — replace your Supabase project ref/URL with placeholders;
+  remove machine-specific absolute paths from examples.
+- **Identity & business detail** — remove personal/company names, private
+  repo names, vendor names tied to specific repos, and any deployed-component
+  inventory from docs, ADRs, runbooks, and agent prompts.
+- **Build exhaust** — delete install logs and personal handoff docs; they are
+  not stack documentation.
+- **History** — rewrite git history (`git filter-repo` or similar). Deleting
+  a file in a new commit does not remove it from earlier commits.
+- Audit every file under `docs/` for accidental leaks before flipping public.
 
 ## User data in subagent_runs
 

@@ -31,6 +31,22 @@ cd claude-code-stack
 
 Each tier is fully functional standalone. See `docs/INSTALL.md` for details.
 
+## What's NOT in this repo — what you must supply
+
+This repo is a configuration layer, not a product with a backend. It ships
+parameterized; you bring your own accounts and fill in the placeholders:
+
+- **Anthropic API access** — required for Claude Code itself (all tiers).
+- **Codex CLI** (Tier 2+) and **Gemini CLI** (Tier 3+) — installed and
+  authenticated locally; see `docs/PROVIDERS.md`.
+- **A Supabase project** (Tier 2+) for the cost log and run history. The
+  docs use the placeholder `<your-supabase-ref>`; set `SUPABASE_URL` in your
+  environment to point at your own project.
+- **Keychain items** for API keys — names listed in `docs/SECURITY.md` and
+  `docs/PROVIDERS.md`. No key values are committed anywhere in this repo.
+- **Your own repo roster** — examples in the docs use generic repo names and
+  tiers. Your real tiers live in each project's `.claude/stack-config.json`.
+
 ## Documentation
 
 - `docs/PHILOSOPHY.md` — why this exists, what it optimizes for
