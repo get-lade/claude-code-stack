@@ -13,6 +13,16 @@ All notable changes to the Claude Code Stack are documented here. Format follows
   the global install — gives the §11 audit a one-command per-repo health
   check it previously lacked.
 
+### Changed
+- `config-merger.sh` — `merge_json` no longer silently overwrites a user's
+  scalar value with the stack's on a conflict. The user's value is kept by
+  default; the stack value is applied only on approval — prompted when a
+  terminal is present, otherwise (or with `STACK_MERGE_NONINTERACTIVE` set)
+  the user value is kept and a `<target>.merge-conflicts` report is written.
+  Objects still deep-merge and arrays still concatenate. Makes
+  `install.sh --mode=merge` honor its documented "preserves user
+  customizations" contract.
+
 ### Fixed
 - `scripts/update.sh` was referenced by `docs/MULTI-MACHINE.md` and the repo
   structure docs but never existed. Written: pulls latest, then re-runs
