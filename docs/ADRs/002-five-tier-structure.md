@@ -6,7 +6,7 @@
 
 ## Context
 
-Different users have different complexity tolerance. A senior engineer running a side project doesn't want 21 subagents. A solo architect running 7 production repos wants the full stack. The stack must serve both.
+Different users have different complexity tolerance. A senior engineer running a side project doesn't want 21 subagents. A solo architect running a portfolio of production repos wants the full stack. The stack must serve both.
 
 ## Decision
 

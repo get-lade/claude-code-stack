@@ -8,7 +8,7 @@ This document captures the plan for converting the stack from a git-repo install
 
 Plugin format is opinionated. Before locking into it, we want:
 - 4+ weeks of Tier 4 runtime data (so /agent-performance-review has informed the design)
-- All 7 of the maintainer's repos passing audit (so the stack is proven across real-world projects)
+- All of the maintainer's repos passing audit (so the stack is proven across real-world projects)
 - No breaking changes to stack for 2+ weeks (stability)
 - Private data scrubbed (so the repo can go public)
 - Polished README (so external users can adopt)

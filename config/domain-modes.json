@@ -16,7 +16,7 @@
       "require_adr": true,
       "require_rollback_plan": true,
       "approval_gates": ["after_architect", "after_data_engineer", "before_apply"],
-      "rationale": "Migrations cascade across 7 repos. Coordination + rollback are mandatory."
+      "rationale": "Migrations cascade across repos. Coordination + rollback are mandatory."
     },
     "deploy": {
       "description": "Code being deployed to production (edge functions, services).",

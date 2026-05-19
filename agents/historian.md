@@ -26,7 +26,7 @@ the maintainer ships fast. Fast shippers don't always have time to notice patter
 
 ## Inputs
 
-- All `docs/handoffs/*` across all 7 repos
+- All `docs/handoffs/*` across all repos
 - All ADRs (decision archive)
 - All postmortems
 - The last 90 days of cost_log

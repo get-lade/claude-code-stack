@@ -100,7 +100,7 @@ All notable changes to the Claude Code Stack are documented here. Format follows
 - `docs/AUDIT-PASS.md` — the retroactive per-repo audit plan.
 
 ### Notes
-- The stack was rolled out to all 7 production repos (Tiers 1–5), one PR per
+- The stack was rolled out to every repo in the rollout (Tiers 1–5), one PR per
   repo. Each repo gained `.claude/stack-config.json`, retroactive ADRs,
   runbooks, `docs/ONBOARDING.md`, and a cross-repo data-flow doc. That
   rollout is tracked in each repo's `docs/handoffs/`, not here.
@@ -121,4 +121,4 @@ All notable changes to the Claude Code Stack are documented here. Format follows
 
 ### Notes
 - Tier 4 self-improvement requires 30 days of subagent_runs data to be meaningful
-- Phase 2 (Claude Code Plugin distribution) deferred until v1 proven across the maintainer's 7 production repos
+- Phase 2 (Claude Code Plugin distribution) deferred until v1 proven across the maintainer's production repos
