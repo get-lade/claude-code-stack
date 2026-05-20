@@ -2,7 +2,7 @@
 
 A tiered, opinionated configuration of Anthropic's Claude Code, designed for technical users who want a multi-agent development team rather than a single AI assistant.
 
-**Status:** Private development. Open-source release planned post-audit.
+**Status:** Public. A personal opinionated stack — shared in case it's useful; no support commitments.
 
 ## What this is
 
@@ -59,7 +59,7 @@ parameterized; you bring your own accounts and fill in the placeholders:
 
 ## Contributing
 
-See `CONTRIBUTING.md`. PRs welcome once the repo opens publicly.
+See `CONTRIBUTING.md`. PRs welcome but not actively solicited — this is a personal stack first.
 
 ## License
 
