@@ -47,3 +47,28 @@ This machine has the Claude Code Stack installed. In projects with `.claude/stac
 - Run `/handoff` before ending a session with open work.
 
 In projects without `.claude/stack-config.json`, foreman will refuse to dispatch. Run `/project-init` first.
+
+## Session start protocol — echo the SessionStart banner
+
+When a session starts, the stack's SessionStart hook injects one of three
+things into your initial context via `<system-reminder>`:
+
+1. A `✅ Stack active — Tier N · domain · strict/permissive · sensitivity:level`
+   block followed by edit shortcuts (`/tier`, `/domain-mode`, etc.) — when
+   the repo is initialized.
+2. A `⚠️ This repo is not stack-initialized` warning pointing to
+   `/project-init` — when in a git repo with no `stack-config.json`.
+3. Nothing — when in a non-git dir or inside the stack source repo itself.
+
+**The user does NOT see this hook output in their UI** — only you do, as
+system context. To make the banner visible to them, you MUST echo it
+verbatim as the very first thing in your first response of the session.
+
+After echoing the banner (one short block, no commentary), respond to
+whatever the user actually asked. If the user's first message is a
+slash command (e.g., `/goodmorning`), still echo the banner first, then
+execute the command.
+
+Do not paraphrase, summarize, or restyle the banner — copy the lines as-is.
+This is the user's only signal that the stack is active and what its
+current settings are.

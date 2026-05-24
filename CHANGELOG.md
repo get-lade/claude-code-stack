@@ -5,6 +5,13 @@ All notable changes to the Claude Code Stack are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Global CLAUDE.md now includes a "Session start protocol" directive
+  telling the assistant to echo the SessionStart hook banner verbatim
+  in its first response. Without this, the ✅/⚠️ banner reached the model
+  as system context but was never visible to the user in the Claude Code
+  Desktop app — hooks are a context-injection mechanism, not a UI surface.
+  Lands in `~/.claude/CLAUDE.md` on next install via the existing
+  CLAUDE_CODE_STACK_MANAGED section.
 - SessionStart hook now shows a ✅ banner with current settings when a
   repo is initialized — tier, domain mode, strict-mode flag, sensitivity
   level — plus shortcut commands to change any of them (`/tier`,
