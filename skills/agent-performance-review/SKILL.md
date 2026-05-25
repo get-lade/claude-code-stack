@@ -15,10 +15,19 @@ Look at what subagents actually did. Find what's not working.
 
 ## Steps
 
-### 1. Pull subagent_runs
-- Query subagent_runs for last 30 days.
-- Group by subagent.
-- For each: invocations, success rate, avg cost, p50/p95 wall time, escalation rate.
+### 1. Pull subagent runs
+
+Source: `~/.claude/logs/subagent-runs.jsonl` (append-only, written by the PreToolUse Agent hook `~/.claude/hooks/subagent-log.sh`). Each row has `ts`, `agent`, `desc`, `model`, `project`, `session_start`.
+
+```bash
+CUTOFF=$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)
+jq -r --arg c "$CUTOFF" 'select(.ts >= $c) | .agent' ~/.claude/logs/subagent-runs.jsonl \
+  | sort | uniq -c | sort -rn
+```
+
+Group by `agent` (optionally filter `.project == "<path>"` for per-repo view). For each: invocation count, model mix, sample of `desc` strings, most recent run.
+
+**Not yet in log** (skip the corresponding Step 2 checks until the log schema grows): success/failure outcome, cost, wall time, escalation events. Today this skill produces a usage + benching picture only; revisit when outcome fields are added.
 
 ### 2. Identify performance issues
 
