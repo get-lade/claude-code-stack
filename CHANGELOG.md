@@ -5,6 +5,40 @@ All notable changes to the Claude Code Stack are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- **Team-status Phase 1.5 — outcome logging**: new `subagent-complete-log.sh`
+  PostToolUse Agent hook pairs with the existing PreToolUse dispatch log.
+  Each completion row carries `event:"complete"`, success bool, and
+  `wall_seconds` (computed against the most recent matching dispatch).
+  Pre-existing dispatch rows now carry `event:"dispatch"` explicitly.
+  Together these unlock real per-agent metrics in
+  `/agent-performance-review`, which has also been pointed at the JSONL log
+  (was referencing a non-existent `subagent_runs` table).
+- **Token-expiry monitor**: new manifest at
+  `~/.claude/state/token-expiry.json` plus
+  `scripts/check-token-expiry.sh` (modes: check / --quiet / add). A
+  SessionStart hook calls `--quiet` so a fresh session prints a warning
+  banner only when a tracked token is within 30 days of expiry, silent
+  otherwise. Catches the failure mode where a Supabase PAT silently expires.
+- **Dispatch-nudge**: new `dispatch-nudge.sh` UserPromptSubmit hook
+  injects a soft system-reminder when a prompt looks like multi-step
+  engineering work (build / add / implement / fix / refactor / migrate)
+  in a Tier 2+ project but no `/foreman` or `/dispatch` was used. Skips
+  slash commands, short prompts (<12 words), and uninitialized projects.
+  Targets the habit of routing non-trivial work through the team.
+- **Statusline mode chip** (Claude Code CLI only): new `statusline.sh`
+  StatusLine hook reads `.claude/stack-config.json` and emits a single-line
+  chip — e.g. `🟢 agent-teams · T3 · strict · schema-migration · 🔒sensitive`
+  or `⚪ uninit`. Wired in the global settings template. Does not render in
+  the Claude Desktop app; the SessionStart banner is the Desktop analogue.
+- **SessionStart banner now shows orchestration_mode**. Old format:
+  `✅ Stack active — Tier 3 · schema-migration · strict · sensitivity:normal`;
+  new format prefixes with mode: `... — main-thread · Tier 3 · ...`.
+  Default reads `main-thread`; flips to `agent-teams` or `hybrid` if
+  `/agent-teams on|hybrid` was used.
+- **Shared runtime lib**: new `lib/find-stack-config.sh` does the
+  walk-up + wrapper-fallback resolution to the nearest
+  `.claude/stack-config.json`. Used by `statusline.sh` and `dispatch-nudge.sh`;
+  available for future hooks that need the same lookup.
 - **Team-status instrumentation (Phase 1)**: every subagent dispatch is now
   logged to `~/.claude/logs/subagent-runs.jsonl` via a PreToolUse hook
   matched on the `Agent` tool. Each row carries timestamp, session_start,
@@ -74,6 +108,12 @@ All notable changes to the Claude Code Stack are documented here. Format follows
   customizations" contract.
 
 ### Fixed
+- Tier manifests now correctly register `subagent-log.sh` and
+  `statusline.sh`, which the team-status Phase 1 commit (a9406eb) had
+  installed into the working copy but never added to `tier-2.json` /
+  `tier-0.json` / `settings.global.template.json`. Fresh installs were
+  therefore missing the team-utilization features. Backfilled in
+  `07e0a93`.
 - `scripts/update.sh` was referenced by `docs/MULTI-MACHINE.md` and the repo
   structure docs but never existed. Written: pulls latest, then re-runs
   `install.sh` in merge mode; refuses to run on a dirty working tree.
