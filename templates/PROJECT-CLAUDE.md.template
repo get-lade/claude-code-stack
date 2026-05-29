@@ -37,6 +37,10 @@ Examples:
 
 <If this repo is financial-code, schema-migration, or deploy-sensitive, declare it here. The foreman will route adversarial review accordingly.>
 
+## Shared conventions
+
+<If this repo follows org-wide conventions enforced via a shared package or template, name them here so the AI uses them instead of reinventing. Example: "Auth — wrap the app in `<CarbonetClerkProvider>` from `@carbonet-nano/auth`, never a raw `<ClerkProvider>`." Delete this section if the repo has no shared-convention dependencies.>
+
 ## Repo family
 
 <If this repo is part of a family of related repos, link them and clarify which one owns schema, secrets, etc.>
