@@ -5,7 +5,7 @@ description: Initialize a project for use with the Claude Code Stack. Asks which
 
 # /project-init
 
-Two-mode project initialization. v1.1.
+Two-mode project initialization. v1.2.
 
 ## Steps
 
@@ -119,7 +119,7 @@ Then ask: "Should this also become your default for new projects?"
 
 ```json
 {
-  "stack_version": "1.1.3",
+  "stack_version": "1.1.4",
   "stack_tier": <chosen>,
   "purpose": "<one-line>",
   "created": "<YYYY-MM-DD>",
@@ -193,13 +193,45 @@ the template by hand.
 **Scaffold ONBOARDING.md.** If `docs/ONBOARDING.md` is absent, copy
 `~/.claude/templates/PROJECT-ONBOARDING.md.template` to it.
 
-**Update `.gitignore`.** Ensure these entries are present (append if missing):
+**Update `.gitignore`.** Ensure every entry below is present (append any
+that are missing — match on the exact line so re-runs don't duplicate). This
+block must cover **all** the runtime scratch paths the stack's skills write
+under a project's `./.claude/`, otherwise that scratch shows up as untracked
+noise in `git status` (one stacked project accumulated ~1,300 untracked lines
+from this gap):
 ```
+# Claude Code Stack — runtime scratch, never commit
 .DS_Store
 .claude/scratch/
 .claude/worktrees/
+.claude/plans/
+.claude/sessions/
+.claude/design-targets/
 .claude/cost-projections/
+.claude/coverage-snapshots/
+.claude/reviews/
+.claude/validations/
+.claude/next_prompt.md
 ```
+What writes each path (keep this list in sync if a skill adds a new scratch
+location): `scratch/` ad-hoc, `worktrees/` worktree dispatch, `plans/`
+`/plan`, `sessions/` the foreman/architect→implementer→validator flow (the
+architect-handoff packet lives at `.claude/sessions/<id>/architect-handoff.md`,
+so `sessions/` already covers it), `design-targets/` `/design-match`,
+`cost-projections/` `/cost-gate`, `coverage-snapshots/` `/coverage-snapshot`,
+`reviews/` `/review-handoff`, `validations/` `/validate-output`,
+`next_prompt.md` `/handoff`.
+
+**Do NOT ignore** the shared, tracked files: `.claude/stack-config.json`,
+root `CLAUDE.md`, and `docs/handoffs/` — those are committed on purpose. (The
+stack's own hooks also write to `~/.claude/logs/`, `~/.claude/state/`, and
+`~/.claude/projects/`, but those live in `$HOME`, not the project, so they
+don't need a project-level ignore.)
+
+> Follow-up (not blocking): the scratch paths above could be consolidated
+> under a single `.claude/scratch/` subtree so this becomes one ignore line.
+> That's a cross-skill refactor (each skill would change its write path); fix
+> the ignore block now, track the consolidation separately.
 
 **Suggest the commit.** Do not commit automatically. Print the suggested
 command for the user to run:

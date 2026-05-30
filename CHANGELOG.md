@@ -4,6 +4,27 @@ All notable changes to the Claude Code Stack are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- **`/project-init` `.gitignore` block now covers all runtime scratch**
+  (`stack_version` → `1.1.4`). The block previously only ignored
+  `.claude/scratch/`, `.claude/worktrees/`, and `.claude/cost-projections/`,
+  but stack skills also write `.claude/plans/` (`/plan`), `.claude/sessions/`
+  (foreman/architect→implementer→validator flow, incl. the nested
+  `architect-handoff.md`), `.claude/design-targets/` (`/design-match`),
+  `.claude/coverage-snapshots/` (`/coverage-snapshot`), `.claude/reviews/`
+  (`/review-handoff`), `.claude/validations/` (`/validate-output`), and
+  `.claude/next_prompt.md` (`/handoff`) — none of which were ignored. Stacked
+  projects accumulated this scratch as untracked noise in `git status` (one
+  project showed ~1,300 untracked lines). Expanded the inline block in
+  `skills/project-init/SKILL.md` step 6 to the full superset and documented
+  which skill owns each path. Shared/tracked files (`.claude/stack-config.json`,
+  `CLAUDE.md`, `docs/handoffs/`) are explicitly kept tracked; host-level
+  `~/.claude/{logs,state,projects}/` are out of scope (they live in `$HOME`,
+  not the project). Existing projects pick up the wider block on the next
+  `/project-init` re-run. Follow-up noted in-skill: consolidating the scratch
+  paths under a single `.claude/scratch/` subtree (one ignore line) is a
+  cross-skill refactor tracked separately.
+
 ### Added
 - **Parallel-mode safety + `dynamic-workflows` orchestration mode**: two
   hardening changes to `/foreman` for the Opus 4.8 experimental
