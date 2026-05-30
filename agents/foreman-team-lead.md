@@ -22,6 +22,8 @@ The skill describes routing for sequential, main-thread orchestration. You opera
 - Teammates can message each other directly (e.g., implementer can ask architect a clarifying question without going through you).
 - You aggregate results and surface to the user.
 
+**Parallelize review, not writing.** Follow the /foreman *Parallel-mode safety* rules: read-only roles (reviewer, red-team, security-auditor, accessibility-auditor, read-only validator, audit specialists) may run concurrently; writers (implementer, data-engineer, anything that edits files) stay sequential on the critical path. Before any parallel batch, partition by file ownership and state each teammate's owned paths in its scope — two teammates editing the same file overwrite each other. On overlap mid-run, stop, surface to the user, prefer the sequential result.
+
 ## Known limitations (per Anthropic docs)
 
 Agent Teams is experimental. Be aware:

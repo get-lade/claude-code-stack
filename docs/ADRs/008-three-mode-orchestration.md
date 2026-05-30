@@ -46,9 +46,40 @@ Foreman is a **skill** (`skills/foreman/SKILL.md`) — the routing source of tru
 - **Negative:** More complexity in foreman skill (must handle three modes). Two foreman artifacts to maintain (skill + team-lead subagent).
 - **Locked in:** `orchestration_mode` field in stack-config.json is now a public part of the stack.
 
+## Addendum (v1.2, 2026-05-30): fourth mode + parallel-mode safety
+
+Opus 4.8 (released 2026-05-28) shipped **Dynamic Workflows** in research
+preview — a workflow runtime that fans out up to 16 concurrent / 1,000 total
+subagents. Public feedback on both experimental features at this point is
+mixed: Agent Teams is well-liked for parallel review/adversarial debugging
+but dogged by coordination bugs (stuck tasks, duplicate spawns, same-file
+overwrites) and ~7× token cost; Dynamic Workflows' dominant risk is uncapped
+spend (a runaway loop reportedly burned ~1.7M tokens with no built-in cap or
+refund) and subagents that auto-approve file edits regardless of session mode.
+
+Two changes, consistent with the original "guard rails around it" instruction:
+
+1. **`dynamic-workflows`** added as a fourth `orchestration_mode`. Scoped to
+   **read-only fan-out** (audits, research sweeps, bug hunts), gated behind
+   `/cost-gate` on every launch (treated as `pre-bulk-job`), never headless on
+   a writable tree, with the `CLAUDE_CODE_DISABLE_WORKFLOWS=1` kill-switch
+   documented. Not for write-heavy work.
+2. **Parallel-mode safety rule** added to `/foreman` and `foreman-team-lead`:
+   under `agent-teams`/`hybrid`, only read-only roles parallelize; writers
+   stay sequential; parallel batches partition by file ownership so no two
+   agents edit the same file. `hybrid` is now the recommended mode over pure
+   `agent-teams` for any task that writes code.
+
+Recommendation captured here for posterity: **start using Agent Teams now for
+human-supervised parallel review/audit** (its proven sweet spot), keep
+implementation on the main-thread, and treat Dynamic Workflows as
+**pilot-only** for scoped, metered, read-only fan-out until it matures.
+
 ## References
 
 - docs.claude.com/en/sub-agents (subagent constraint)
 - docs.claude.com/en/agent-teams (Agent Teams docs)
+- code.claude.com/docs/en/workflows (Dynamic Workflows docs)
 - v1.1 corrections changelog
 - Conversation between the maintainer and Claude on 2026-05-15 (post-review)
+- Conversation between the maintainer and Claude on 2026-05-30 (Opus 4.8 review)

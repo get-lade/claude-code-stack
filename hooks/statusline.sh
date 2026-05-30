@@ -26,10 +26,11 @@ DOMAIN="$(jq -r '.domain_mode // empty' "$CONFIG")"
 SENS="$(jq -r '.sensitivity.level // "normal"' "$CONFIG")"
 
 case "$MODE" in
-  agent-teams) ICON="🟢" ;;
-  hybrid)      ICON="🟡" ;;
-  main-thread) ICON="⚪" ;;
-  *)           ICON="❔" ;;
+  agent-teams)       ICON="🟢" ;;
+  hybrid)            ICON="🟡" ;;
+  dynamic-workflows) ICON="🔵" ;;
+  main-thread)       ICON="⚪" ;;
+  *)                 ICON="❔" ;;
 esac
 
 STRICT_LBL="permissive"

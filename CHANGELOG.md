@@ -5,6 +5,25 @@ All notable changes to the Claude Code Stack are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- **Parallel-mode safety + `dynamic-workflows` orchestration mode**: two
+  hardening changes to `/foreman` for the Opus 4.8 experimental
+  orchestration features.
+  1. *File-ownership / no-overlap rule* — new "Parallel-mode safety"
+     subsection in the `/foreman` dispatch protocol (mirrored in the
+     `foreman-team-lead` agent). Under `agent-teams`/`hybrid`, only
+     read-only roles (reviewer, red-team, security/accessibility-auditor,
+     read-only validator) parallelize; writers (implementer, data-engineer)
+     stay sequential, and parallel batches must partition by file ownership
+     so no two agents edit the same file. `hybrid` reframed as the
+     recommended mode: main-thread critical write path + parallel
+     review/audit only.
+  2. *`dynamic-workflows` mode* — added to the `orchestration_mode` enum in
+     `stack-config-schema.json` and to `/foreman` step 2, with a
+     "Dynamic-workflows guardrails" subsection: read-only by default,
+     mandatory `/cost-gate` before every workflow launch (treated as a
+     `pre-bulk-job`), no headless writes, `CLAUDE_CODE_DISABLE_WORKFLOWS=1`
+     kill-switch documented, and domain-mode overrides required for
+     financial-code / schema-migration / confidential work.
 - **Team-status Phase 1.5 — outcome logging**: new `subagent-complete-log.sh`
   PostToolUse Agent hook pairs with the existing PreToolUse dispatch log.
   Each completion row carries `event:"complete"`, success bool, and

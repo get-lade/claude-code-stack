@@ -25,9 +25,9 @@
     "last_modified": { "type": "string", "format": "date" },
     "orchestration_mode": {
       "type": "string",
-      "enum": ["main-thread", "agent-teams", "hybrid"],
+      "enum": ["main-thread", "agent-teams", "hybrid", "dynamic-workflows"],
       "default": "main-thread",
-      "description": "v1.1: How foreman dispatches subagents. main-thread is trusted default; agent-teams uses Anthropic's experimental feature; hybrid mixes."
+      "description": "v1.1: How foreman dispatches subagents. main-thread is trusted default; agent-teams uses Anthropic's experimental Agent Teams; hybrid mixes (main-thread critical path + parallel review/audit via teams); dynamic-workflows uses Opus 4.8's research-preview workflow runtime for read-only fan-out, gated behind /cost-gate (v1.2)."
     },
     "strict_mode": {
       "type": "boolean",

@@ -15,8 +15,9 @@ You orchestrate the team. You don't write code, design, test, or review yourself
 
 2. **Check orchestration mode.**
    - `main-thread` (default): you (the main thread) invoke subagents sequentially. This skill guides which and in what order.
-   - `agent-teams`: spawn an Agent Team via "create an agent team for <task>". The foreman-team-lead subagent uses this same skill as its routing logic.
-   - `hybrid`: critical path runs main-thread (architect → implementer → reviewer); parallel exploration uses Agent Teams.
+   - `agent-teams`: spawn an Agent Team via "create an agent team for <task>". The foreman-team-lead subagent uses this same skill as its routing logic. **Experimental** — parallelize read-only work (review, audit, adversarial investigation) only; keep all file-writing work sequential. See *Parallel-mode safety* below.
+   - `hybrid` (recommended over pure agent-teams): the **critical write path runs main-thread** (architect → implementer → validator → reviewer); only **parallel review/audit/exploration** fans out to Agent Teams. Never parallelize implementers.
+   - `dynamic-workflows` (Opus 4.8 research preview): for large **read-only fan-out** — codebase-wide audits, multi-angle research, bug hunts. Gated behind `/cost-gate` and **read-only by default**. See *Dynamic-workflows guardrails* below. Not for write-heavy work.
 
 3. **Classify the task.** Based on user's request, pick one:
    - `feature` — new functionality
@@ -89,6 +90,25 @@ For each subagent in the team:
 3. Wait for completion.
 4. Read the subagent's report.
 5. Move to next subagent (parallel where the team is parallel).
+
+### Parallel-mode safety (agent-teams / hybrid / dynamic-workflows)
+
+Anthropic's docs warn: **two teammates editing the same file leads to overwrites.** When any work runs in parallel, enforce these rules:
+
+1. **No two parallel agents may write the same file.** Before dispatching a parallel batch, partition the work by file/path ownership and state each agent's owned paths in its scope. If two agents would touch the same file, serialize them (run on main-thread) instead.
+2. **Only read-only roles parallelize freely.** reviewer, red-team, security-auditor, accessibility-auditor, validator (read-only checks), and audit-task specialists can run concurrently — they don't write source.
+3. **Writers stay sequential.** implementer, data-engineer, and any subagent that edits files run one-at-a-time on the critical path, even in `agent-teams`/`hybrid` mode. Parallelism buys you faster *review and investigation*, not faster *editing*.
+4. **On overlap detected mid-run** (two teammates report touching the same file): stop, surface to user, prefer the main-thread result, discard/redo the conflicting one.
+
+### Dynamic-workflows guardrails
+
+`dynamic-workflows` mode uses Opus 4.8's research-preview workflow runtime (fans out up to 16 concurrent / 1,000 total subagents). Its biggest risk is **uncapped token spend** (launch-window incident: ~1.7M tokens burned in a runaway loop, no built-in spend cap, no refunds), and its subagents **auto-approve file edits regardless of session permission mode**. Treat it as experimental and only enter this mode when ALL of these hold:
+
+1. **Read-only by default.** Use it for audits, research sweeps, and bug hunts — not write-heavy tasks. If a workflow must write, it stays out of this mode (route to main-thread).
+2. **`/cost-gate` first, every time.** Before launching a workflow, run `/cost-gate` on a scoped sample and get the explicit "proceed". A workflow launch counts as a bulk job — the `pre-bulk-job` gate applies.
+3. **Never headless without a sandbox.** Do not run dynamic workflows under `claude -p` / Agent SDK on a writable tree (no interactive edit confirmation there).
+4. **Kill-switch known.** If anything looks runaway, stop the run; org-level disable is `disableWorkflows` in settings / `CLAUDE_CODE_DISABLE_WORKFLOWS=1`.
+5. **Honor domain modes.** `financial-code`, `schema-migration`, and `sensitivity: confidential` require explicit user override (log it, same as agent-teams).
 
 ## Composition
 

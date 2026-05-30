@@ -17,7 +17,7 @@
     "default_tier": { "type": "integer", "minimum": 0, "maximum": 5, "default": 2 },
     "default_orchestration_mode": {
       "type": "string",
-      "enum": ["main-thread", "agent-teams", "hybrid"],
+      "enum": ["main-thread", "agent-teams", "hybrid", "dynamic-workflows"],
       "default": "main-thread"
     },
     "default_strict_mode": { "type": "boolean", "default": true },
