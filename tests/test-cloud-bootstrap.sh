@@ -21,11 +21,13 @@ rm -f "$MARKER"
 ( unset CLAUDE_CODE_REMOTE; bash "$SCRIPT" ) >/dev/null 2>&1; check "no-op outside cloud" 0 $?
 [[ ! -f "$MARKER" ]] && echo "  [PASS] no marker written outside cloud" || { echo "  [FAIL] marker written outside cloud"; failures=$((failures + 1)); }
 
-# 2. Missing token in cloud mode → warn + exit 0 (never break the session).
+# 2. Public repo: no token needed, and an unreachable clone still exits 0
+#    (best-effort, never breaks the session). 127.0.0.1 fails fast, no DNS wait.
 rm -f "$MARKER"
-out="$(CLAUDE_CODE_REMOTE=true CLAUDE_STACK_REPO_TOKEN="" bash "$SCRIPT" 2>&1)"; rc=$?
-check "missing token exits 0" 0 "$rc"
-grep -q "CLAUDE_STACK_REPO_TOKEN is not set" <<<"$out" && echo "  [PASS] missing-token warning printed" || { echo "  [FAIL] no missing-token warning"; failures=$((failures + 1)); }
+out="$(CLAUDE_CODE_REMOTE=true CLAUDE_STACK_REPO_TOKEN="" \
+      CLAUDE_STACK_REPO="127.0.0.1:9/nope" bash "$SCRIPT" 2>&1)"; rc=$?
+check "tokenless unreachable clone exits 0" 0 "$rc"
+grep -q "could not clone" <<<"$out" && echo "  [PASS] clone-failure warning printed" || { echo "  [FAIL] no clone-failure warning"; failures=$((failures + 1)); }
 
 # 3. Marker present → short-circuit (rc 0), even with a token set.
 : > "$MARKER"

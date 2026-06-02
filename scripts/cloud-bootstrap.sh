@@ -15,22 +15,25 @@
 #      to that repo's SessionStart hook, so that repo self-bootstraps the
 #      stack in cloud with no per-environment config.
 #
-# It clones this (PRIVATE) repo with a token from the environment, then runs
-# the idempotent installer: install.sh --mode=merge backs up ~/.claude and
-# deep-merges JSON (user wins on conflict), so re-runs are safe.
+# It clones this repo, then runs the idempotent installer: install.sh
+# --mode=merge backs up ~/.claude and deep-merges JSON (user wins on conflict),
+# so re-runs are safe.
 #
-# REQUIRED ENV:
-#   CLAUDE_STACK_REPO_TOKEN   GitHub token with read access to the private
-#                             repo. NEVER hardcode it — set it in the
-#                             environment config (Claude Code web secret/env).
+# The repo is PUBLIC, so the clone needs no credential — no per-environment
+# token, no setup-script secret. This makes the flow fully repo-driven:
+# /project-init commits this script into a repo and the repo self-installs the
+# stack in cloud with nothing configured on the environment.
 #
 # OPTIONAL ENV:
-#   CLAUDE_STACK_REPO   default: github.com/bschonbrun/claude-code-stack
-#   CLAUDE_STACK_REF    default: main
-#   CLAUDE_STACK_TIER   default: 2
+#   CLAUDE_STACK_REPO        default: github.com/bschonbrun/claude-code-stack
+#   CLAUDE_STACK_REF         default: main
+#   CLAUDE_STACK_TIER        default: 2
+#   CLAUDE_STACK_REPO_TOKEN  only needed if the repo is ever made private
+#                            again; if set, it is used (via GIT_ASKPASS, never
+#                            in argv or .git/config). Never hardcode it.
 #
-# EXIT POLICY: best-effort. A missing token or a network-blocked clone prints
-# a prominent warning and exits 0 — it never hard-fails the cloud session.
+# EXIT POLICY: best-effort. A network-blocked clone prints a prominent warning
+# and exits 0 — it never hard-fails the cloud session.
 
 set -uo pipefail
 
@@ -59,39 +62,34 @@ REPO="${REPO#https://}"
 REPO="${REPO#http://}"
 REPO="${REPO%.git}"
 
-if [ -z "${CLAUDE_STACK_REPO_TOKEN:-}" ]; then
-  log "WARNING: CLAUDE_STACK_REPO_TOKEN is not set."
-  log "The Claude Code Stack repo is private, so its skills/commands cannot be"
-  log "synced into this cloud session. Set CLAUDE_STACK_REPO_TOKEN in the"
-  log "environment config (see docs/CLOUD.md). Continuing without the stack."
-  exit 0
-fi
-# install.sh shells out to git; make sure the token reaches the askpass helper.
-export CLAUDE_STACK_REPO_TOKEN
-
-# Clone shallow into a temp dir. Keep the token OUT of argv and out of
-# .git/config by supplying it through GIT_ASKPASS rather than embedding it in
-# the clone URL. The username (x-access-token) lives in the URL; git asks the
-# helper only for the password, which we answer with the token.
 TMP="$(mktemp -d)"
 ASKPASS="$(mktemp)"
 cleanup() { rm -rf "$TMP" "$ASKPASS"; }
 trap cleanup EXIT
 
-printf '#!/bin/sh\nexec printf "%%s" "$CLAUDE_STACK_REPO_TOKEN"\n' > "$ASKPASS"
-chmod +x "$ASKPASS"
-
-clone_url="https://x-access-token@${REPO}.git"
+# Public repo → anonymous clone, no credential. If CLAUDE_STACK_REPO_TOKEN is
+# set anyway (e.g. the repo was made private again), use it via GIT_ASKPASS so
+# the token stays OUT of argv and .git/config: the username (x-access-token)
+# lives in the URL and git asks the helper only for the password.
+if [ -n "${CLAUDE_STACK_REPO_TOKEN:-}" ]; then
+  export CLAUDE_STACK_REPO_TOKEN
+  printf '#!/bin/sh\nexec printf "%%s" "$CLAUDE_STACK_REPO_TOKEN"\n' > "$ASKPASS"
+  chmod +x "$ASKPASS"
+  export GIT_ASKPASS="$ASKPASS"
+  clone_url="https://x-access-token@${REPO}.git"
+else
+  clone_url="https://${REPO}.git"
+fi
 
 attempt=0
 max=3
 delay=2
-until GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="$ASKPASS" \
+until GIT_TERMINAL_PROMPT=0 \
       git clone --depth 1 --branch "$REF" "$clone_url" "$TMP/stack" >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge "$max" ]; then
     log "WARNING: could not clone $REPO (ref $REF) after $max attempts."
-    log "Check the environment's network policy and CLAUDE_STACK_REPO_TOKEN."
+    log "Check the environment's network policy allows GitHub."
     log "Continuing without the stack."
     exit 0
   fi

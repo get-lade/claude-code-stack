@@ -9,20 +9,22 @@ All notable changes to the Claude Code Stack are documented here. Format follows
   skills/commands (`/goodmorning`, `/handoff`, …) now work in Claude Code
   *cloud* sessions, not just the Mac Desktop app. Cloud containers never sync a
   user's laptop `~/.claude`, so new `scripts/cloud-bootstrap.sh` clones this
-  (private) repo using a `CLAUDE_STACK_REPO_TOKEN` from the environment and runs
-  the idempotent `install.sh --tier=2 --skip-requirements` into the container's
-  `~/.claude`. The token is passed via `GIT_ASKPASS` (never in argv or
-  `.git/config`); the script is best-effort (missing token / blocked network →
-  warn + exit 0, never breaks the session) and guarded by a per-boot marker so
-  it runs at most once. Two distribution paths: (A) register it as the
-  per-environment **setup script** (covers every repo) or (B) `/project-init`
-  commits a copy into a repo's `.claude/hooks/`, wires the `SessionStart` hook,
-  and copies a portable-core skill set (`config/portable-core-skills.json`) so
-  the repo self-bootstraps. Installed to `~/.claude/scripts/` via the Tier 0
-  manifest (+ smoke tests). New `docs/CLOUD.md` documents registration, the
-  token/network-policy caveats, `/goodmorning` verification, and why a plugin
-  (deferred per ADR-007) wouldn't replace this bootstrap. New
-  `tests/test-cloud-bootstrap.sh` covers the offline decision paths.
+  **public** repo anonymously (no token, no environment secret) and runs the
+  idempotent `install.sh --tier=2 --skip-requirements` into the container's
+  `~/.claude`. The script is best-effort (blocked network → warn + exit 0, never
+  breaks the session) and guarded by a per-boot marker so it runs at most once.
+  Two distribution paths: (B, recommended) `/project-init` commits a copy into a
+  repo's `.claude/hooks/`, wires the `SessionStart` hook, and copies a
+  portable-core skill set (`config/portable-core-skills.json`) so the repo
+  self-bootstraps with **zero** environment config; or (A) register it as a
+  per-environment **setup script** (covers every repo using that environment).
+  If the repo is ever made private again, set `CLAUDE_STACK_REPO_TOKEN` on the
+  environment and the bootstrap uses it via `GIT_ASKPASS` (never in argv or
+  `.git/config`). Installed to `~/.claude/scripts/` via the Tier 0 manifest
+  (+ smoke tests). New `docs/CLOUD.md` documents both paths, the network-policy
+  caveat, `/goodmorning` verification, and why a plugin (deferred per ADR-007)
+  wouldn't replace this bootstrap. New `tests/test-cloud-bootstrap.sh` covers
+  the offline decision paths.
 - **Session preferences picker (`/session`)**: a per-session, multiple-choice
   way to set communication style (terse/balanced/thorough), model effort,
   explanation verbosity, orchestration mode, and cost-alert sensitivity — so

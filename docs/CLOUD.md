@@ -29,14 +29,28 @@ That's the whole reason a project-committed skill works in cloud but a personal
 > `/goodmorning`, `/handoff`, etc. are all skills. When the docs say
 > "skills/commands," they mean these SKILL.md directories.
 
+## The repo is public → no token, no secrets
+
+The stack repo is **public**, so the bootstrap clones it **anonymously**. There
+is no `CLAUDE_STACK_REPO_TOKEN` to set, no environment secret, and nothing
+secret committed anywhere. (If the repo is ever made private again, set
+`CLAUDE_STACK_REPO_TOKEN` on the environment; the bootstrap will pick it up via
+`GIT_ASKPASS`. Otherwise ignore it.)
+
 ## Two distribution paths
 
 | Path | Mechanism | Scope | Set up where |
 |---|---|---|---|
-| **A. Personal / global** | Environment setup script clones this repo and runs `install.sh` into `~/.claude` | **Every** cloud session of **every** repo | Once, in the Claude Code web **environment** config |
-| **B. Project-specific** | `/project-init` commits a bootstrap hook + portable-core skills into the repo's `.claude/` | **One** repo, travels with it | Per repo, via `/project-init` |
+| **B. Repo-driven (recommended)** | `/project-init` commits a bootstrap hook + portable-core skills into the repo's `.claude/` | **One** repo, travels with it | Per repo, via `/project-init` — **nothing** on the environment |
+| **A. Environment-wide (optional)** | A setup script on the environment clones this repo and runs `install.sh` into `~/.claude` | **Every** cloud session using that environment | Once per environment, in the web UI |
 
-Both paths run the **same** logic — `scripts/cloud-bootstrap.sh` → token-auth
+Path B is the primary, fully repo-driven flow: the stack sets each repo up and
+the repo self-installs in cloud with **zero** environment configuration. Path A
+is an optional convenience if you'd rather configure an environment once than
+run `/project-init` per repo — but note cloud environments are configured
+**individually**, so Path A must be repeated for each environment.
+
+Both paths run the **same** logic — `scripts/cloud-bootstrap.sh` → anonymous
 clone → `install.sh --tier=2 --skip-requirements` (idempotent: backs up
 `~/.claude`, deep-merges JSON, user wins on conflict). They share a per-boot
 marker (`/tmp/.claude-stack-cloud-bootstrap.done`), so if both fire, the first
@@ -50,79 +64,34 @@ Setup scripts are configured **per environment**, not stored in a target repo.
 See the official docs:
 <https://code.claude.com/docs/en/claude-code-on-the-web>.
 
-### 1. Add the repo-read token to the environment
+### 1. Confirm the network policy allows the clone
 
-This repo is **private**, so the clone needs a credential. In your Claude Code
-web environment config, add an environment variable / secret:
-
-| Name | Value |
-|---|---|
-| `CLAUDE_STACK_REPO_TOKEN` | A GitHub **fine-grained PAT** scoped to `bschonbrun/claude-code-stack` with **Contents: read-only** (or a classic token with `repo` scope) |
-
-Never paste the token into any file in any repo. It lives only in the
-environment config. The bootstrap reads it from the environment and passes it
-to `git` via `GIT_ASKPASS`, so it never lands in `argv` or `.git/config`.
-
-Optional overrides (defaults shown):
-
-| Name | Default |
-|---|---|
-| `CLAUDE_STACK_REPO` | `github.com/bschonbrun/claude-code-stack` |
-| `CLAUDE_STACK_REF` | `main` |
-| `CLAUDE_STACK_TIER` | `2` |
-
-### 2. Confirm the network policy allows the clone
-
-The clone only works if the environment's **network policy** permits outbound
-git to GitHub. If your environment uses a restricted policy, allow
-`github.com` (and its `codeload`/`objects` hosts). If the policy blocks it, the
+The clone needs the environment's **network policy** to permit outbound git to
+GitHub (the default allowlist does). If a restricted policy blocks it, the
 bootstrap warns and exits 0 — the session still works, just without the stack.
 
-### 3. Register the setup script
+### 2. Register the setup script
 
-Paste this as the environment's **setup script** (it inlines the bootstrap so
-the target repo doesn't need to contain anything):
+Paste this as the environment's **setup script**. No token, no env vars — the
+repo is public, so the clone is anonymous:
 
 ```bash
 # Claude Code Stack — cloud bootstrap (environment setup script)
-# Requires CLAUDE_STACK_REPO_TOKEN to be set in this environment.
 set -u
 REPO="${CLAUDE_STACK_REPO:-github.com/bschonbrun/claude-code-stack}"
 REPO="${REPO#https://}"; REPO="${REPO%.git}"
 REF="${CLAUDE_STACK_REF:-main}"
 TIER="${CLAUDE_STACK_TIER:-2}"
 
-if [ -z "${CLAUDE_STACK_REPO_TOKEN:-}" ]; then
-  echo "[stack-cloud-bootstrap] CLAUDE_STACK_REPO_TOKEN not set; skipping." >&2
-  exit 0
-fi
-export CLAUDE_STACK_REPO_TOKEN
-
-TMP="$(mktemp -d)"; ASKPASS="$(mktemp)"
-trap 'rm -rf "$TMP" "$ASKPASS"' EXIT
-printf '#!/bin/sh\nexec printf "%%s" "$CLAUDE_STACK_REPO_TOKEN"\n' > "$ASKPASS"
-chmod +x "$ASKPASS"
-
-GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="$ASKPASS" \
-  git clone --depth 1 --branch "$REF" \
-  "https://x-access-token@${REPO}.git" "$TMP/stack" \
+TMP="$(mktemp -d)"
+git clone --depth 1 --branch "$REF" "https://${REPO}.git" "$TMP/stack" \
   && bash "$TMP/stack/scripts/install.sh" --tier="$TIER" --skip-requirements
 ```
 
-This is intentionally the same flow as the committed
-[`scripts/cloud-bootstrap.sh`](../scripts/cloud-bootstrap.sh). If you prefer to
-keep one source of truth, you can instead make the environment setup script a
-two-liner that clones once and execs the committed script:
-
-```bash
-git clone --depth 1 \
-  "https://x-access-token:${CLAUDE_STACK_REPO_TOKEN}@github.com/bschonbrun/claude-code-stack.git" \
-  /tmp/claude-stack \
-  && CLAUDE_CODE_REMOTE=true bash /tmp/claude-stack/scripts/cloud-bootstrap.sh
-```
-
-(The inline version above is preferred because it keeps the token out of the
-clone URL / process list.)
+This is the same flow as the committed
+[`scripts/cloud-bootstrap.sh`](../scripts/cloud-bootstrap.sh) (which adds retries
+and an idempotency marker). Optional overrides: `CLAUDE_STACK_REPO`,
+`CLAUDE_STACK_REF`, `CLAUDE_STACK_TIER`.
 
 ---
 
@@ -138,16 +107,15 @@ prompt. It commits, idempotently:
   `.claude/skills/` so the core workflow exists even before the clone finishes
   or if the network policy blocks it.
 
-The repo still needs `CLAUDE_STACK_REPO_TOKEN` defined in whatever environment
-its cloud sessions run in (the full stack arrives via the clone). The committed
-portable-core skills work with no token at all.
+No token or environment config is needed — the full stack arrives via an
+anonymous clone of the public repo, and the committed portable-core skills work
+even if the network policy blocks the clone.
 
 ---
 
 ## Verify `/goodmorning` resolves in a fresh cloud session
 
-1. Start a fresh cloud session (web or iOS) on any repo whose environment has
-   `CLAUDE_STACK_REPO_TOKEN` set.
+1. Start a fresh cloud session (web or iOS) on the repo.
 2. The SessionStart bootstrap should print an install log (the same one
    `install.sh` emits). Confirm it ends with `All checks passed.`
 3. In the session, run a quick check:
@@ -159,10 +127,8 @@ portable-core skills work with no token at all.
 If it doesn't resolve:
 - **No install log at all** → the setup script isn't registered (Path A) or the
   repo's hook isn't committed/executable (Path B).
-- **`CLAUDE_STACK_REPO_TOKEN is not set`** warning → add the token to the
-  environment config.
 - **`could not clone … after 3 attempts`** → the network policy is blocking
-  GitHub, or the token lacks read access to the repo.
+  GitHub. (The committed portable-core skills still work.)
 
 ---
 

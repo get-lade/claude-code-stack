@@ -232,13 +232,14 @@ files; merge or skip and warn instead**:
    destination is absent (skip + note any that already exist). These give the
    repo an offline-safe floor (e.g. `/goodmorning`, `/handoff`) even before the
    bootstrap clone finishes or if the environment's network policy blocks it.
-4. **Token reminder.** Remind the user (don't block): the bootstrap clones a
-   **private** repo, so the cloud environment must define
-   `CLAUDE_STACK_REPO_TOKEN`. Point them at `docs/CLOUD.md`. Never write a
-   token into any committed file.
+4. **No token needed.** The stack repo is **public**, so the committed
+   bootstrap clones anonymously — nothing to configure on the environment, no
+   secret. (If the repo is ever made private again, set `CLAUDE_STACK_REPO_TOKEN`
+   on the environment; the bootstrap will use it. Never write a token into any
+   committed file.) See `docs/CLOUD.md`.
 
-If the user declines, skip this block — the env-level setup script in
-`docs/CLOUD.md` can still cover every repo.
+If the user declines, skip this block — they can wire the bootstrap later, or
+register the env-level setup script from `docs/CLOUD.md`.
 
 **Update `.gitignore`.** Ensure every entry below is present (append any
 that are missing — match on the exact line so re-runs don't duplicate). This
