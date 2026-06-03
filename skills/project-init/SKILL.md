@@ -208,13 +208,18 @@ the template by hand.
 **Set up cloud-session support (web + iOS).** Cloud sessions run in an
 ephemeral container that never sees the user's laptop `~/.claude`, so the
 stack's skills/commands aren't discoverable unless they travel with the repo
-or are installed at session start. Offer once:
-> "Make the stack work in this repo's Claude Code cloud sessions (web/iOS)?
-> This commits a SessionStart bootstrap hook + a small portable-core skill
-> set into `.claude/`. [Y/n]"
+or are installed at session start. Offer a three-way choice once:
+> "Enable the stack in Claude Code cloud sessions (web/iOS)?
+>  [t] This repo only — commit a bootstrap hook + portable-core skills into
+>      `.claude/` (no env config; travels with the repo).
+>  [a] All repos — show the one-time setup-script to paste into the cloud
+>      environment (covers every repo on that environment).
+>  [b] Both.
+>  [n] Skip.
+>  (t/a/b/N)"
 
-If yes, do all of the following **idempotently — never clobber existing
-files; merge or skip and warn instead**:
+**If `t` or `b` (this repo):** do all of the following **idempotently — never
+clobber existing files; merge or skip and warn instead**:
 
 1. **Bootstrap hook.** If `.claude/hooks/cloud-bootstrap.sh` is absent, copy
    `~/.claude/scripts/cloud-bootstrap.sh` to it and `chmod +x`. If it already
@@ -238,8 +243,15 @@ files; merge or skip and warn instead**:
    on the environment; the bootstrap will use it. Never write a token into any
    committed file.) See `docs/CLOUD.md`.
 
-If the user declines, skip this block — they can wire the bootstrap later, or
-register the env-level setup script from `docs/CLOUD.md`.
+**If `a` or `b` (all repos):** you cannot set the cloud environment from here —
+environment setup scripts live in the Claude Code web config, not in any repo.
+So **run the `/cloud-setup` skill** (or print its output): it shows the
+click-by-click steps and the exact one-liner to paste into the environment's
+**Setup script** field, once per environment. Make clear this is a manual paste
+the user does in the web UI; `/project-init` can't apply it for them.
+
+If the user declines (`n`), skip this block — they can wire the bootstrap later
+via `/project-init`, or run `/cloud-setup` anytime.
 
 **Update `.gitignore`.** Ensure every entry below is present (append any
 that are missing — match on the exact line so re-runs don't duplicate). This

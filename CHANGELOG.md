@@ -21,6 +21,12 @@ All notable changes to the Claude Code Stack are documented here. Format follows
   `tests/test-reconcile.sh` (stubbed `gh`/`git`). Design in
   `docs/ADRs/014-org-wide-cloud-distribution.md`. Not yet run against a live
   org — dry-run + security review recommended before enabling writes.
+- **`/cloud-setup` skill**: prints the one-time setup-script one-liner + the
+  click-by-click steps to enable the stack in a Claude Code cloud environment
+  (web + iOS). Cloud environments are configured individually in the web UI and
+  can't be set from a repo, so this makes the unavoidable manual paste a single
+  copy. Public repo → no token. Installed via the Tier 0 manifest (+ smoke
+  test); `docs/CLOUD.md` Path A now points at it.
 - **Cloud session support (web + iOS)**: the stack's personal/global
   skills/commands (`/goodmorning`, `/handoff`, …) now work in Claude Code
   *cloud* sessions, not just the Mac Desktop app. Cloud containers never sync a

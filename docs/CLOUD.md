@@ -72,26 +72,21 @@ bootstrap warns and exits 0 — the session still works, just without the stack.
 
 ### 2. Register the setup script
 
-Paste this as the environment's **setup script**. No token, no env vars — the
-repo is public, so the clone is anonymous:
+Run **`/cloud-setup`** in any local session to print these steps plus the
+one-liner, or paste this directly into the environment's **Setup script** field
+and **Save**. No token, no env vars — the repo is public, so the clone is
+anonymous:
 
 ```bash
-# Claude Code Stack — cloud bootstrap (environment setup script)
-set -u
-REPO="${CLAUDE_STACK_REPO:-github.com/bschonbrun/claude-code-stack}"
-REPO="${REPO#https://}"; REPO="${REPO%.git}"
-REF="${CLAUDE_STACK_REF:-main}"
-TIER="${CLAUDE_STACK_TIER:-2}"
-
-TMP="$(mktemp -d)"
-git clone --depth 1 --branch "$REF" "https://${REPO}.git" "$TMP/stack" \
-  && bash "$TMP/stack/scripts/install.sh" --tier="$TIER" --skip-requirements
+rm -rf /tmp/ccs && git clone --depth 1 https://github.com/bschonbrun/claude-code-stack /tmp/ccs && bash /tmp/ccs/scripts/install.sh --tier=2 --skip-requirements
 ```
 
-This is the same flow as the committed
-[`scripts/cloud-bootstrap.sh`](../scripts/cloud-bootstrap.sh) (which adds retries
-and an idempotency marker). Optional overrides: `CLAUDE_STACK_REPO`,
-`CLAUDE_STACK_REF`, `CLAUDE_STACK_TIER`.
+`install.sh --mode=merge` (default) backs up `~/.claude` and deep-merges, so
+re-running each session boot is safe. Change `--tier=2` to pick a tier. This is
+the same install the committed [`scripts/cloud-bootstrap.sh`](../scripts/cloud-bootstrap.sh)
+runs (that variant adds retries and an idempotency marker, used by Path B).
+
+Repeat per environment — cloud environments are configured individually.
 
 ---
 
