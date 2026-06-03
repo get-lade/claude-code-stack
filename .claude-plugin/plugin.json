@@ -1,0 +1,10 @@
+{
+  "name": "claude-code-stack",
+  "version": "1.0.0",
+  "description": "Orchestration stack: foreman + subagents, session/handoff skills, cost & brevity guardrails, and design/data toolchains. Skills are gated at runtime by .claude/stack-config.json.",
+  "author": {
+    "name": "bschonbrun",
+    "url": "https://github.com/bschonbrun/claude-code-stack"
+  },
+  "homepage": "https://github.com/bschonbrun/claude-code-stack"
+}

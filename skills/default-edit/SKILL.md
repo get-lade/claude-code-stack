@@ -1,6 +1,6 @@
 ---
 name: default-edit
-description: Interactive editor for stack configuration. Two scopes: 'global' edits ~/.claude/stack-defaults.json (affects all NEW projects, doesn't change existing); 'project' edits current project's stack-config.json. Confirms each change. For safety-relevant settings, prompts for reason and asks whether to also update global default.
+description: Interactive editor for stack configuration. Two scopes — 'global' edits ~/.claude/stack-defaults.json (affects all NEW projects, doesn't change existing); 'project' edits current project's stack-config.json. Confirms each change. For safety-relevant settings, prompts for reason and asks whether to also update global default.
 ---
 
 # /default-edit

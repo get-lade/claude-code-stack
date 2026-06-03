@@ -1,6 +1,6 @@
 ---
 name: coverage-snapshot
-description: Run before any bulk data operation that updates existing rows (enrichment, backfill, migration). Snapshots current coverage (counts of populated fields), runs the operation, snapshots again, fails loudly if any field regressed. Targets the data-overwrite friction (Apr 2026: re-enrichment script dropped image coverage 90% → 34%). Pairs with /cost-gate for bulk LLM jobs.
+description: Run before any bulk data operation that updates existing rows (enrichment, backfill, migration). Snapshots current coverage (counts of populated fields), runs the operation, snapshots again, fails loudly if any field regressed. Targets the data-overwrite friction (Apr 2026 — re-enrichment script dropped image coverage 90% → 34%). Pairs with /cost-gate for bulk LLM jobs.
 ---
 
 # /coverage-snapshot

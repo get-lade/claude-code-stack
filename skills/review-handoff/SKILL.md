@@ -1,6 +1,6 @@
 ---
 name: review-handoff
-description: Use BEFORE declaring any multi-artifact deliverable done. Walks through structured review: cross-artifact consistency, hardcoded values, live-verification needs, gaps relative to requirements, Liu's test on new markdown. Output is a structured review report; next step is approve or revise. Required for any handoff, spec, design doc, audit report.
+description: Use BEFORE declaring any multi-artifact deliverable done. Walks through structured review — cross-artifact consistency, hardcoded values, live-verification needs, gaps relative to requirements, Liu's test on new markdown. Output is a structured review report; next step is approve or revise. Required for any handoff, spec, design doc, audit report.
 ---
 
 # /review-handoff

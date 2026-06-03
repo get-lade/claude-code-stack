@@ -12,7 +12,7 @@ INPUT="$(cat 2>/dev/null || echo '{}')"
 CWD="$(echo "$INPUT" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null)"
 [[ -z "$CWD" ]] && CWD="$PWD"
 
-CONFIG="$(bash "$HOME/.claude/lib/find-stack-config.sh" "$CWD")"
+CONFIG="$(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/lib/find-stack-config.sh" "$CWD")"
 
 if [[ -z "$CONFIG" || ! -f "$CONFIG" ]]; then
   echo "⚪ uninit"

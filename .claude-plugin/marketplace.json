@@ -1,0 +1,15 @@
+{
+  "name": "claude-code-stack",
+  "description": "Single-plugin marketplace for the Claude Code Stack — orchestration, session/handoff, and guardrail skills + subagents.",
+  "owner": {
+    "name": "bschonbrun",
+    "url": "https://github.com/bschonbrun/claude-code-stack"
+  },
+  "plugins": [
+    {
+      "name": "claude-code-stack",
+      "source": "./",
+      "description": "Orchestration stack: foreman + subagents, session/handoff skills, cost & brevity guardrails, and design/data toolchains."
+    }
+  ]
+}

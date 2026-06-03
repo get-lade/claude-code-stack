@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Use BEFORE writing any code for non-trivial tasks (anything beyond a 1-line fix). Forces architect-style thinking: state assumptions, propose 2+ approaches with tradeoffs, define success criteria, get explicit user approval. Targets the Wrong Approach friction pattern (the #1 friction in May 2026 Insights). Output is a written plan in .claude/plans/<date>-<topic>.md. Wait for "proceed" before any implementation.
+description: Use BEFORE writing any code for non-trivial tasks (anything beyond a 1-line fix). Forces architect-style thinking — state assumptions, propose 2+ approaches with tradeoffs, define success criteria, get explicit user approval. Targets the Wrong Approach friction pattern (the #1 friction in May 2026 Insights). Output is a written plan in .claude/plans/<date>-<topic>.md. Wait for "proceed" before any implementation.
 ---
 
 # /plan

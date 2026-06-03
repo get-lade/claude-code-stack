@@ -1,6 +1,6 @@
 ---
 name: sensitivity
-description: Shortcut to set the project's data sensitivity level. Three levels: normal (default), sensitive (PII present — extra logging), confidential (regulated data — local-ops routing required, cloud subagents restricted). /sensitivity <level> sets it. Downgrading is safety-relevant. /sensitivity (no arg) shows current and what it restricts.
+description: Shortcut to set the project's data sensitivity level. Three levels — normal (default), sensitive (PII present — extra logging), confidential (regulated data — local-ops routing required, cloud subagents restricted). /sensitivity <level> sets it. Downgrading is safety-relevant. /sensitivity (no arg) shows current and what it restricts.
 ---
 
 # /sensitivity

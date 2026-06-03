@@ -1,6 +1,6 @@
 ---
 name: local-ops
-description: Variant of ops for tasks where data must NOT leave the laptop — sensitive financial exports, prod data inspection, anything user marks confidential. Runs on local Ollama models. Routing: foreman inspects task tags or stack-config sensitivity flags; routes to local-ops automatically when sensitive.
+description: Variant of ops for tasks where data must NOT leave the laptop — sensitive financial exports, prod data inspection, anything user marks confidential. Runs on local Ollama models. Routing — foreman inspects task tags or stack-config sensitivity flags; routes to local-ops automatically when sensitive.
 model: ollama/llama3.1:8b
 ---
 

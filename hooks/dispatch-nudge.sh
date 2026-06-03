@@ -29,7 +29,7 @@ if ! echo "$LOWER" | grep -qE '\b(build|add|implement|fix|refactor|migrate|deplo
 fi
 
 # Only nudge in stack-initialized Tier 2+ projects.
-CONFIG="$(bash "$HOME/.claude/lib/find-stack-config.sh" "$CWD" 2>/dev/null)"
+CONFIG="$(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/lib/find-stack-config.sh" "$CWD" 2>/dev/null)"
 [[ -z "$CONFIG" ]] && exit 0
 
 TIER="$(jq -r '.stack_tier // 0' "$CONFIG" 2>/dev/null)"

@@ -1,6 +1,6 @@
 ---
 name: cost-gate
-description: Run before any bulk LLM job (>100 rows or any LLM-per-row script). Samples 10 rows, measures actual tokens, projects total cost, writes projection to .claude/cost-projections/, and stops for explicit approval. Use when about to kick off scripts matching enrich|backfill|bulk-*|rescue or anything calling an LLM in a loop. Targets the cost-runaway friction pattern (May 2026: $123 unexpected charges before halted).
+description: Run before any bulk LLM job (>100 rows or any LLM-per-row script). Samples 10 rows, measures actual tokens, projects total cost, writes projection to .claude/cost-projections/, and stops for explicit approval. Use when about to kick off scripts matching enrich|backfill|bulk-*|rescue or anything calling an LLM in a loop. Targets the cost-runaway friction pattern (May 2026 — $123 unexpected charges before halted).
 ---
 
 # /cost-gate

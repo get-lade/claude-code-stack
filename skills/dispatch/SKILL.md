@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: Manually dispatch a task to a specific subagent team. Override for the foreman's default routing. Use when you want explicit control over which subagents run, or when foreman misroutes. Format: /dispatch <team-name-or-list> for <task>. Available team names match subagent names from config/model-routing.json.
+description: Manually dispatch a task to a specific subagent team. Override for the foreman's default routing. Use when you want explicit control over which subagents run, or when foreman misroutes. Format — /dispatch <team-name-or-list> for <task>. Available team names match subagent names from config/model-routing.json.
 ---
 
 # /dispatch

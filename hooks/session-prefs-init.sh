@@ -34,7 +34,7 @@ GLOBAL="$HOME/.claude/stack-defaults.json"
 
 # Project layer (nearest .claude/stack-config.json via the shared finder).
 P='{}'
-FINDER="$HOME/.claude/lib/find-stack-config.sh"
+FINDER="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/lib/find-stack-config.sh"
 if [ -x "$FINDER" ]; then
   CONFIG="$(bash "$FINDER" "$CWD" 2>/dev/null || true)"
   [ -n "$CONFIG" ] && [ -f "$CONFIG" ] && \

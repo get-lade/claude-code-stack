@@ -1,6 +1,6 @@
 ---
 name: validate-output
-description: Use AFTER implementing financial code or anything where output VALUES matter (not just shapes). Runs the code with representative inputs, asserts specific expected values, not just "response was 200" or "object had X keys". Targets the shape-only-smoke-test friction (Apr 2026: 32% AR / 38% AP understatement bugs slipped through shape-only validation). Required for financial-code mode at Tier 2+.
+description: Use AFTER implementing financial code or anything where output VALUES matter (not just shapes). Runs the code with representative inputs, asserts specific expected values, not just "response was 200" or "object had X keys". Targets the shape-only-smoke-test friction (Apr 2026 — 32% AR / 38% AP understatement bugs slipped through shape-only validation). Required for financial-code mode at Tier 2+.
 ---
 
 # /validate-output

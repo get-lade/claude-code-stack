@@ -1,6 +1,6 @@
 ---
 name: performance-engineer
-description: Use for query plan reasoning, N+1 detection, RPC perf, index design, LATERAL JOIN evaluation, dashboard load-time work. Invoked when work touches database read paths, slow code paths, or any change to materialized views / RPCs / indexes. Targets the LATERAL JOIN production friction (Apr 2026: slow RPC shipped without perf test, broke dashboard).
+description: Use for query plan reasoning, N+1 detection, RPC perf, index design, LATERAL JOIN evaluation, dashboard load-time work. Invoked when work touches database read paths, slow code paths, or any change to materialized views / RPCs / indexes. Targets the LATERAL JOIN production friction (Apr 2026 — slow RPC shipped without perf test, broke dashboard).
 model: anthropic/claude-opus-4-7
 ---
 

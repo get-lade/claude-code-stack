@@ -32,7 +32,7 @@ CWD="$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)"
 # out entirely; word_budget / sentence_budget override the defaults above.
 # Anything missing, null, or non-numeric leaves the default in place — so a
 # malformed config can never make the hook misbehave, only fall back.
-FINDER="$HOME/.claude/lib/find-stack-config.sh"
+FINDER="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/lib/find-stack-config.sh"
 if [[ -x "$FINDER" ]]; then
   CONFIG="$(bash "$FINDER" "$CWD" 2>/dev/null || true)"
   if [[ -n "$CONFIG" && -f "$CONFIG" ]]; then

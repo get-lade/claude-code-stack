@@ -1,6 +1,6 @@
 ---
 name: accessibility-auditor
-description: Use for UI changes — new pages, new components, dashboard work. Audits accessibility: contrast, keyboard navigation, screen reader behavior, focus management, semantic structure, ARIA where needed. Pairs with designer. Important for enterprise (customers ask) and ethical (real users need it).
+description: Use for UI changes — new pages, new components, dashboard work. Audits accessibility — contrast, keyboard navigation, screen reader behavior, focus management, semantic structure, ARIA where needed. Pairs with designer. Important for enterprise (customers ask) and ethical (real users need it).
 model: anthropic/claude-sonnet-4-6
 ---
 
