@@ -51,7 +51,27 @@ with no per-user install?**
 - Note from build: `--print`/non-TTY **skips** the workspace-trust dialog, so
   any scripted check must use an interactive session to exercise the real trust flow.
 
-## Recommendation
+## Cloud gate — RESOLVED 2026-06-03: **FAILED**
 
-Local Phase 0 items **all pass**; managed-settings question **resolved (B3 out, B1 stands)**.
-The remaining cloud-load gate needs a published artifact to test. Two ways forward — decision required (see chat).
+Tested in a live Claude Code **cloud** session (launched from the Desktop Mac app,
+connected to `bschonbrun/stack-plugin-test`, which committed the `enabledPlugins`
++ `extraKnownMarketplaces` block to `.claude/settings.json`).
+
+**Result: cloud sessions support connectors + commands, but NOT plugins or adding
+folders.** No workspace-trust prompt appeared; the Plugins panel was greyed
+out / inaccessible; `/goodmorning` returned "Unknown command." The repo-committed
+settings block did **not** auto-enable the plugin.
+
+**This kills the migration's core premise.** Plugins are desktop/local-only; they
+do not reach cloud — the same dead-end that ruled out org-level Skills. The
+`claude-code-stack` plugin built + merged in #18 is therefore useful for
+**local/desktop CLI only**. Cloud (web/iOS) still requires the existing file-copy
+bootstrap (`scripts/cloud-bootstrap.sh`), which already works there.
+
+## Recommendation — UPDATED
+
+- Local/CLI Phase 0 items all pass; managed-settings resolved (B3 out).
+- **Cloud gate FAILED → do NOT proceed to Phase 2/3 of the plugin migration.**
+- **Decision (2026-06-03): option C — pause and recheck later.** Park the built
+  plugin; keep the file-copy bootstrap + reconciler for cloud. Re-test with
+  `bschonbrun/stack-plugin-test` if/when Claude Code cloud adds plugin support.
