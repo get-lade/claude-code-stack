@@ -1,11 +1,12 @@
 # Runbook: subagent model pins in 1M-context sessions
 
 **Status:** F1 fixed + spawn-verified 2026-06-04 (fresh 1M boot, no `[1m]` error).
-F2 root-caused + FIXED 2026-06-04 — **stack bug, not upstream**: `agents/*.md`
-declared `tools:` as a lowercase YAML list, but Claude Code tool names are
-PascalCase, so the toolset resolved empty and agents emitted tool calls as text.
-Fix: rewrite every `tools:` block as a CSV of PascalCase names. Verified PASS on
-a fresh 1M boot (`designer`, `tool_uses: 1`, accurate facts).
+F2 **CLOSED 2026-06-04 — 22/23 agents verified** on a fresh 1M boot. Stack bug,
+not upstream: `agents/*.md` declared `tools:` as a lowercase YAML list, but Claude
+Code tool names are PascalCase, so the toolset resolved empty and agents emitted
+tool calls as text. Fix: rewrite every `tools:` block as a CSV of PascalCase names.
+Every dispatchable agent returned `tool_uses: 1` with accurate facts. Only
+`local-ops` (ollama model) is unverified — needs a local ollama runtime to test.
 
 ## Symptom
 
@@ -65,8 +66,17 @@ Applied to all 14 agents that declared a `tools:` list; synced to `~/.claude`.
 
 **Confirm run 2026-06-04 (fresh 1M boot, parent `claude-opus-4-8[1m]`).**
 `designer` (fixed first, as the test vector) → `tool_uses: 1`, line 1 `---`,
-`model: opus`, line count accurate. PASS → hypothesis confirmed, rolled out to
-the remaining 13.
+`model: opus`, line count accurate. PASS → hypothesis confirmed, rolled out.
+
+**Full re-test 2026-06-04 (fresh 1M boot, parent `claude-opus-4-8[1m]`).** Every
+dispatchable agent given a Read smoke test (`agents/<name>.md` → report line 1,
+line count, `model:`), ground-truthed against `wc -l`/`head`/`grep`. **22/23 PASS**
+(`tool_uses: 1`, accurate facts, correct model pin): designer, reviewer,
+implementer, validator, accessibility-auditor, architect, architecture-critic,
+data-engineer, documenter, estimator, historian, incident-commander,
+integration-specialist, librarian, ops, performance-engineer, product-critic,
+red-team, scribe, security-auditor, tester, foreman-team-lead. **Untested:**
+`local-ops` (model `ollama/llama3.1:8b` — requires a local ollama runtime). F2 closed.
 
 ---
 
