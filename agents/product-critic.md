@@ -1,11 +1,7 @@
 ---
 name: product-critic
 model: sonnet
-tools:
-  - read
-  - grep
-  - bash
-  - web_search
+tools: Read, Grep, Bash, WebSearch
 allowed_invokes: []
 forbidden_invokes:
   - architect

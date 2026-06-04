@@ -3,13 +3,7 @@ name: designer
 model: opus
 escalation_model: opus
 escalation_triggers: []
-tools:
-  - read
-  - write
-  - edit
-  - grep
-  - glob
-  - web_search
+tools: Read, Write, Edit, Grep, Glob, WebSearch
 allowed_invokes:
   - accessibility-auditor
 forbidden_invokes:

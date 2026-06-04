@@ -6,10 +6,7 @@ escalation_triggers:
   - MCP authentication failures
   - secret rotation needed
   - deploy verification anomalies
-tools:
-  - read
-  - bash
-  - grep
+tools: Read, Bash, Grep
 allowed_invokes:
   - incident-commander
 forbidden_invokes:

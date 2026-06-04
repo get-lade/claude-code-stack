@@ -1,6 +1,11 @@
 # Runbook: subagent model pins in 1M-context sessions
 
-**Status:** F1 fixed (this repo); F2 suspected upstream — needs transcript + Anthropic report.
+**Status:** F1 fixed + spawn-verified 2026-06-04 (fresh 1M boot, no `[1m]` error).
+F2 root-caused + FIXED 2026-06-04 — **stack bug, not upstream**: `agents/*.md`
+declared `tools:` as a lowercase YAML list, but Claude Code tool names are
+PascalCase, so the toolset resolved empty and agents emitted tool calls as text.
+Fix: rewrite every `tools:` block as a CSV of PascalCase names. Verified PASS on
+a fresh 1M boot (`designer`, `tool_uses: 1`, accurate facts).
 
 ## Symptom
 
@@ -49,7 +54,24 @@ does (which is known to work). Either delete the `model:`/`escalation_model:`
 lines or set them to `inherit`. Tradeoff: loses tiering — cheaper agents run on
 the parent's (opus) model.
 
-### F2 — dead tool bridge for custom agents  (SUSPECTED UPSTREAM)
+### F2 — dead tool bridge for custom agents  (STACK BUG — FIXED 2026-06-04)
+
+**Root cause:** `tools:` was a lowercase YAML list (`- read`, `- web_search`).
+Claude Code tool names are PascalCase (`Read`, `WebSearch`); lowercase matched
+nothing → empty toolset → the agent could not emit real `tool_use` and wrote
+`<invoke name="Read">…` as literal text, hallucinating results. **Fix:** every
+`tools:` block rewritten as CSV PascalCase (e.g. `tools: Read, Grep, Glob, Bash`).
+Applied to all 14 agents that declared a `tools:` list; synced to `~/.claude`.
+
+**Confirm run 2026-06-04 (fresh 1M boot, parent `claude-opus-4-8[1m]`).**
+`designer` (fixed first, as the test vector) → `tool_uses: 1`, line 1 `---`,
+`model: opus`, line count accurate. PASS → hypothesis confirmed, rolled out to
+the remaining 13.
+
+---
+
+_Original (pre-fix) investigation, kept for provenance:_
+
 
 Even with a valid model (e.g. forcing opus/sonnet via the Agent tool's `model:`
 override to get past the F1 spawn error), pinned/custom agents **emit tool calls
@@ -64,6 +86,19 @@ the tool channel, not a stack bug. If F1 is fixed but F2 persists:
    `tool_uses: 0`).
 2. File upstream to Anthropic with the transcript and the parent model id.
 3. Note the date and Anthropic ticket here.
+
+**Verification run 2026-06-04 (fresh 1M boot, parent `claude-opus-4-8[1m]`).**
+Dispatched `designer` (frontmatter pin `model: opus`, NO Agent-tool override) to
+Read `agents/designer.md` and report line 1 / line count / `model:` value.
+- Spawn: **OK** — no `[1m]` model error → F1 fix confirmed live.
+- Tool channel: **DEAD** — `tool_uses: 0`; the Read call was emitted as literal
+  text `<invoke name="Read">…`.
+- Result: **hallucinated** — agent reported `14` lines + `model: sonnet` and a
+  fabricated in-file `<system-reminder>` block. Ground truth (Bash, same session):
+  line 1 `---`, **105** lines, `model: opus` (line 3), `escalation_model: opus`
+  (line 4). No `tools:` line at the reported position; no system-reminder in file.
+- Verdict: **F2** (upstream harness bug). Stack `agents/*.md` left unchanged.
+- Anthropic ticket: _pending — file with this transcript + parent model id._
 
 ## Verification (MUST be a FRESH 1M session)
 

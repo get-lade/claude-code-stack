@@ -4,12 +4,7 @@ model: sonnet
 escalation_model: opus
 escalation_triggers:
   - architectural-level documentation
-tools:
-  - read
-  - write
-  - edit
-  - grep
-  - glob
+tools: Read, Write, Edit, Grep, Glob
 allowed_invokes: []
 forbidden_invokes: []
 context_caching: false

@@ -6,13 +6,7 @@ escalation_triggers:
   - complex refactor across >5 files
   - performance-critical inner loop
   - novel algorithm
-tools:
-  - read
-  - write
-  - edit
-  - bash
-  - grep
-  - glob
+tools: Read, Write, Edit, Bash, Grep, Glob
 allowed_invokes: []
 forbidden_invokes:
   - architect

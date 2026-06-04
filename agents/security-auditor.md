@@ -5,11 +5,7 @@ escalation_model: opus
 escalation_triggers:
   - novel patterns
   - first-of-its-kind crypto / auth code
-tools:
-  - read
-  - grep
-  - glob
-  - bash
+tools: Read, Grep, Glob, Bash
 allowed_invokes: []
 forbidden_invokes:
   - implementer

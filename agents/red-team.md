@@ -1,11 +1,7 @@
 ---
 name: red-team
 model: sonnet
-tools:
-  - read
-  - bash
-  - grep
-  - glob
+tools: Read, Bash, Grep, Glob
 allowed_invokes: []
 forbidden_invokes:
   - implementer
