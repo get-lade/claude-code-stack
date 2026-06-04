@@ -1,11 +1,7 @@
 ---
 name: historian
 model: sonnet
-tools:
-  - read
-  - grep
-  - glob
-  - bash
+tools: Read, Grep, Glob, Bash
 allowed_invokes: []
 forbidden_invokes: []
 context_caching: false

@@ -5,13 +5,7 @@ escalation_model: opus
 escalation_triggers:
   - novel property tests
   - performance/load testing
-tools:
-  - read
-  - write
-  - edit
-  - bash
-  - grep
-  - glob
+tools: Read, Write, Edit, Bash, Grep, Glob
 allowed_invokes: []
 forbidden_invokes:
   - implementer

@@ -6,11 +6,7 @@ escalation_triggers:
   - novel domain
   - multi-system integration
   - schema design
-tools:
-  - read
-  - grep
-  - glob
-  - web_search
+tools: Read, Grep, Glob, WebSearch
 allowed_invokes:
   - architecture-critic
 forbidden_invokes:

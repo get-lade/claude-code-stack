@@ -4,11 +4,7 @@ model: haiku
 escalation_model: sonnet
 escalation_triggers:
   - cross-session thread tracking required
-tools:
-  - read
-  - write
-  - bash
-  - grep
+tools: Read, Write, Bash, Grep
 allowed_invokes: []
 forbidden_invokes: []
 context_caching: false

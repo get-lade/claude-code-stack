@@ -5,10 +5,7 @@ escalation_model: opus
 escalation_triggers:
   - financial values mismatch
   - critical-path code (auth, payments, schema migrations)
-tools:
-  - read
-  - bash
-  - grep
+tools: Read, Bash, Grep
 allowed_invokes: []
 forbidden_invokes:
   - implementer
