@@ -22,6 +22,8 @@
       { "from": "skills/session/SKILL.md", "to": "~/.claude/skills/session/SKILL.md" },
       { "from": "skills/auto-merge/SKILL.md", "to": "~/.claude/skills/auto-merge/SKILL.md" },
       { "from": "skills/auto-merge/templates/auto-merge.yml", "to": "~/.claude/skills/auto-merge/templates/auto-merge.yml" },
+      { "from": "skills/auto-merge/templates/run-tests.node.yml", "to": "~/.claude/skills/auto-merge/templates/run-tests.node.yml" },
+      { "from": "skills/auto-merge/templates/run-tests.python.yml", "to": "~/.claude/skills/auto-merge/templates/run-tests.python.yml" },
       { "from": "templates/stack-defaults.template.json", "to": "~/.claude/stack-defaults.json", "prompt_for_values": true }
     ]
   },

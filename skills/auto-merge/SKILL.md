@@ -1,23 +1,33 @@
 ---
 name: auto-merge
-description: Per-repo opt-in for GitHub auto-merge gated on a required `run-tests` status check. /auto-merge on <repo> enables allow_auto_merge, creates a per-repo ruleset requiring the run-tests check, and installs an auto-enable workflow so PRs merge themselves once tests pass. /auto-merge off <repo> reverts all three. /auto-merge status <repo> shows current state. Use when a repo's PRs should merge automatically on green CI instead of waiting for a manual merge.
+description: Per-repo opt-in for GitHub auto-merge gated on a required `run-tests` status check. /auto-merge on <repo> ensures a run-tests CI check exists (scaffolds one if missing), enables allow_auto_merge, creates a per-repo ruleset requiring run-tests, and installs an auto-enable workflow so PRs merge themselves once tests pass. /auto-merge off <repo> reverts. /auto-merge status <repo> shows current state. Use when a repo's PRs should merge automatically on green CI instead of waiting for a manual merge.
 ---
 
 # /auto-merge
 
-Turn auto-merge on or off for a single repo. **Always per-repo and opt-in** — never org-wide. Auto-merge only fires when a *required* status check is pending, so this skill wires three things together:
+Turn auto-merge on or off for a single repo. **Always per-repo and opt-in** — never org-wide. Auto-merge only fires when a *required* status check is pending, so this skill wires together:
 
-1. `allow_auto_merge = true` on the repo (makes the button available).
-2. A **per-repo ruleset** requiring the `run-tests` status check (gives auto-merge something to gate on).
-3. An **auto-enable workflow** (`.github/workflows/auto-merge.yml`) that clicks "Enable auto-merge" on every PR, so merging is truly hands-off.
+1. A **`run-tests` CI check** (the gate). If the repo doesn't have one, `on` scaffolds it first.
+2. `allow_auto_merge = true` on the repo (makes the button available).
+3. A **per-repo ruleset** requiring the `run-tests` check (gives auto-merge something to gate on).
+4. An **auto-enable workflow** (`.github/workflows/auto-merge.yml`) that clicks "Enable auto-merge" on every PR, so merging is truly hands-off.
 
-Without a required check, GitHub merges immediately and never offers auto-merge. Without `run-tests` actually running in the repo, enabling this would lock every PR forever — so step 1 of `on` is a hard precheck.
+Without a required check, GitHub merges immediately and never offers auto-merge. A required check that never reports would lock every PR forever — so `on` guarantees `run-tests` exists and is green on `main` *before* it creates the ruleset.
+
+## `on` is two-phase
+
+The `run-tests` workflow must be on `main` **before** the ruleset requires it, or open PRs lock. So `on` runs in two phases across two invocations:
+
+- **Phase 1 — repo has no `run-tests` check.** Detect the repo's test command, generate `run-tests.yml`, open a PR, and **stop**. The user merges it (after confirming it's green), then re-runs `/auto-merge on`.
+- **Phase 2 — `run-tests` is live on `main`.** Enable the flag, create the ruleset, open the bootstrap auto-enable PR.
+
+A repo that already has `run-tests` goes straight to Phase 2.
 
 ## Usage
 
 ```
 /auto-merge status <repo>     # show current state (default action if arg omitted)
-/auto-merge on <repo>         # enable auto-merge gated on run-tests
+/auto-merge on <repo>         # enable auto-merge gated on run-tests (scaffolds run-tests if missing)
 /auto-merge off <repo>        # revert ruleset + flag + workflow
 ```
 
@@ -25,53 +35,67 @@ Without a required check, GitHub merges immediately and never offers auto-merge.
 
 ## Required check contract
 
-The gate is the status check named **`run-tests`**. This is deliberate: auto-merge should wait on a real test job, not on CodeQL/Dependabot noise. A repo must produce a check named exactly `run-tests` (a workflow job named `run-tests`, or a workflow whose check context is `run-tests`) before auto-merge can be enabled.
+The gate is the status check named **`run-tests`** — a workflow job named `run-tests` (its check context equals the job name). Deliberate: auto-merge should wait on a real test job, not CodeQL/Dependabot noise. Rulesets match by exact context string, so `Analyze (python)` etc. do **not** satisfy it.
 
 ## Steps
 
 ### 1. Resolve + status
 
 - Resolve `<repo>` to `OWNER/REPO`.
-- Read current state and print it:
+- Read and print current state:
   - `allow_auto_merge`: `gh api repos/OWNER/REPO --jq '.allow_auto_merge'`
-  - per-repo ruleset present: `gh api repos/OWNER/REPO/rulesets --jq '[.[] | select(.name=="auto-merge-required-checks")] | length'`
-  - workflow present: `gh api repos/OWNER/REPO/contents/.github/workflows/auto-merge.yml --jq '.path' 2>/dev/null`
-  - whether the repo currently emits a `run-tests` check (see step 2 detection)
+  - ruleset present: `gh api repos/OWNER/REPO/rulesets --jq '[.[]|select(.name=="auto-merge-required-checks")]|length'`
+  - auto-enable workflow present: `gh api repos/OWNER/REPO/contents/.github/workflows/auto-merge.yml --jq '.path' 2>/dev/null`
+  - `run-tests` present (see step 2 detection)
 - For bare `/auto-merge` or `status`, stop here.
 
-### 2. `on` — precheck `run-tests` exists (HARD GATE)
+### 2. `on` — detect `run-tests` (decides the phase)
 
-Detect whether the repo produces a `run-tests` check on its default branch HEAD:
+`run-tests` counts as present if **either** the workflow file exists on the default branch **or** the check reported on the default-branch HEAD:
 
 ```
+gh api repos/OWNER/REPO/contents/.github/workflows/run-tests.yml --jq '.path' 2>/dev/null
 DB=$(gh api repos/OWNER/REPO --jq '.default_branch')
 SHA=$(gh api repos/OWNER/REPO/commits/$DB --jq '.sha')
 gh api repos/OWNER/REPO/commits/$SHA/check-runs --jq '[.check_runs[].name] | index("run-tests")'
 ```
 
-Also check for a workflow job named `run-tests`:
+- **Present →** go to step 4 (Phase 2).
+- **Absent →** go to step 3 (Phase 1).
 
-```
-gh api repos/OWNER/REPO/contents/.github/workflows 2>/dev/null --jq '.[].name'
-# then grep candidate workflow files for a job key or name "run-tests"
-```
+### 3. Phase 1 — scaffold `run-tests`, then stop
 
-- If **neither** is found: **refuse**. Print:
-  > Repo OWNER/REPO has no `run-tests` check. Enabling auto-merge now would block every PR permanently (the required check would never report). Add a test workflow whose job/check is named `run-tests`, then re-run `/auto-merge on`.
-  Offer to scaffold a minimal `run-tests` workflow if the user wants — but do not enable auto-merge until the check exists.
-- If found: continue.
+Detect the repo's test command, **confirm the generated workflow with the user**, open a PR, and stop.
 
-### 3. `on` — enable the flag
+**3a. Detect the test command.** Inspect the repo (read files via `gh api repos/OWNER/REPO/contents/<path> --jq '.content' | base64 -d`):
+
+| Signal | Generated install + test |
+|---|---|
+| root `package.json` has `scripts.test` + `pnpm-workspace.yaml` | pnpm: `pnpm install --frozen-lockfile` → `pnpm -r test` |
+| root `package.json` has `scripts.test`, no workspace | detect pm from lockfile (`pnpm-lock.yaml`/`package-lock.json`/`yarn.lock`) → `<pm> install` → `<pm> test` |
+| `pyproject.toml`/`setup.cfg` with pytest, or `tests/` + `requirements*.txt` | `pip install -r requirements.txt` (or `pip install -e .`) → `pytest` |
+
+Match the toolchain to existing workflows in the repo (Node version, pnpm version via `packageManager`) — read another `.github/workflows/*.yml` for the versions already in use.
+
+**3b. No real tests → REFUSE.** If no `test` script and no Python test setup is found, do **not** scaffold a placeholder. Print:
+> Repo OWNER/REPO has no test suite. A required `run-tests` check that tests nothing is a meaningless gate. Add real tests first, then re-run `/auto-merge on`.
+Stop.
+
+**3c. Generate + confirm.** Build `run-tests.yml` from `<skill-dir>/templates/run-tests.node.yml` (Node/pnpm) or `<skill-dir>/templates/run-tests.python.yml` (Python), substituting the detected commands/versions. The job **must** be named `run-tests`. Show the user the full file and the detected command. Open the PR only after they confirm.
+
+**3d. Open the PR + stop.** Branch `chore/add-run-tests-check`, commit the file at `.github/workflows/run-tests.yml`, open a PR. Then print:
+> Phase 1 done. Merge PR #<n> once `run-tests` is green, then re-run `/auto-merge on OWNER/REPO` to finish (flag + ruleset + auto-enable workflow).
+Do **not** proceed to Phase 2 in the same invocation — the check must be on `main` first.
+
+### 4. Phase 2 — enable the flag
 
 ```
 gh api -X PATCH repos/OWNER/REPO -f allow_auto_merge=true -f allow_squash_merge=true -f delete_branch_on_merge=true
 ```
 
-### 4. `on` — create/update the per-repo ruleset
+### 5. Phase 2 — create the per-repo ruleset
 
-Create a ruleset named `auto-merge-required-checks` on the default branch requiring the `run-tests` check. This sits beside the org-level `main-branch-protection` ruleset (rulesets compose; required checks from all matching rulesets apply).
-
-Send a **JSON body via stdin** — `gh`'s `-f`/`-F` flags cannot build the nested `rules[].parameters.required_status_checks[]` array and return HTTP 422:
+Sits beside the org-level `main-branch-protection` ruleset (rulesets compose). Send a **JSON body via stdin** — `gh`'s `-f`/`-F` flags cannot build the nested `required_status_checks[]` array and return HTTP 422:
 
 ```
 gh api -X POST repos/OWNER/REPO/rulesets --input - <<'JSON'
@@ -93,21 +117,19 @@ gh api -X POST repos/OWNER/REPO/rulesets --input - <<'JSON'
 JSON
 ```
 
-If a ruleset named `auto-merge-required-checks` already exists, PUT it (`gh api -X PUT repos/OWNER/REPO/rulesets/<id> --input -`) instead of creating a duplicate.
+If a ruleset named `auto-merge-required-checks` already exists, PUT it (`gh api -X PUT repos/OWNER/REPO/rulesets/<id> --input -`) instead of creating a duplicate. `~DEFAULT_BRANCH` is GitHub's literal token — pass it verbatim.
 
-`~DEFAULT_BRANCH` is GitHub's literal token for "the repo's default branch" — pass it verbatim.
+### 6. Phase 2 — install the auto-enable workflow (via PR)
 
-### 5. `on` — install the auto-enable workflow (via PR)
+`.github/workflows/auto-merge.yml` **cannot be pushed to the default branch directly** (org ruleset requires a PR; sandbox can't push to main / `gh pr create` may be blocked — see CLAUDE.md). So:
 
-The workflow file lives at `.github/workflows/auto-merge.yml`. **It cannot be pushed to the default branch directly** — the org ruleset blocks direct pushes and requires a PR (and this sandbox cannot push to main / cannot `gh pr create`; see CLAUDE.md). So:
+1. Copy `<skill-dir>/templates/auto-merge.yml`.
+2. Branch `chore/auto-merge-bootstrap`, commit the file.
+3. Open a PR. **This first PR is merged manually** (the auto-enable workflow isn't on `main` yet). Every PR after it auto-merges once `run-tests` passes.
 
-1. Copy the template from `<skill-dir>/templates/auto-merge.yml`.
-2. Create a branch `chore/auto-merge-bootstrap`, commit the file.
-3. Open a PR. **This first PR is merged manually** (chicken-and-egg: the workflow that auto-merges isn't on the default branch yet). Every PR after it auto-merges once `run-tests` passes.
+If the sandbox can't open the PR, **hand off**: print the file path, branch name, and exact `git`/`gh` commands.
 
-If the sandbox cannot open the PR, **hand off**: print the file path, the branch name, and the exact `git`/`gh` commands for the user to run.
-
-### 6. `off` — revert all three
+### 7. `off` — revert
 
 - Delete the ruleset:
   ```
@@ -115,16 +137,18 @@ If the sandbox cannot open the PR, **hand off**: print the file path, the branch
   [ -n "$ID" ] && gh api -X DELETE repos/OWNER/REPO/rulesets/$ID
   ```
 - Disable the flag: `gh api -X PATCH repos/OWNER/REPO -F allow_auto_merge=false`
-- Remove the workflow: open a PR deleting `.github/workflows/auto-merge.yml` (same push constraint as step 5 — hand off if needed).
-- Note: existing queued auto-merges on open PRs will cancel when the flag flips off.
+- Remove the auto-enable workflow: open a PR deleting `.github/workflows/auto-merge.yml` (same push constraint — hand off if needed).
+- Leave `run-tests.yml` in place (it's a useful CI check regardless of auto-merge).
+- Note: queued auto-merges on open PRs cancel when the flag flips off.
 
-### 7. Confirm
+### 8. Confirm
 
-Print a 2-line summary: repo, what changed (flag / ruleset / workflow PR#), and the next manual step if a PR is awaiting manual merge.
+Print a 2-line summary: repo, what changed (run-tests PR# / flag / ruleset / bootstrap PR#), and the next manual step if a PR awaits a manual merge.
 
 ## Gotchas
 
-- **First PR merges manually.** The auto-enable workflow only takes effect once it's on the default branch. Bootstrap PR is the exception.
-- **`run-tests` must be the exact check context.** Rulesets match by context string. CodeQL's `Analyze (python)` etc. are *not* `run-tests` and won't satisfy the gate.
-- **Org ruleset still applies.** `main-branch-protection` (linear history, no force-push, PR required) composes with this one. Don't duplicate those rules here.
-- **GITHUB_TOKEN PRs.** PRs opened by `GITHUB_TOKEN` don't trigger downstream workflows, so the auto-enable workflow uses `pull_request` events from real authors / Dependabot; that's the intended path.
+- **`on` may take two invocations.** Phase 1 (scaffold run-tests) and Phase 2 (enable) are separated by a manual merge — the required check must be on `main` before the ruleset references it, or open PRs lock.
+- **First bootstrap PR merges manually.** The auto-enable workflow only takes effect once it's on the default branch.
+- **`run-tests` must be the exact check context.** Rulesets match by context string.
+- **Org ruleset still applies.** `main-branch-protection` (linear history, no force-push, PR required) composes with this one — don't duplicate those rules.
+- **GITHUB_TOKEN PRs** don't trigger downstream workflows, so the auto-enable workflow uses `pull_request` events from real authors / Dependabot.
