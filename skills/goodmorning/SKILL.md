@@ -91,6 +91,21 @@ communication/working preferences.
 - If `source` is already `"session"`, skip silently (don't re-offer).
 - Skip silently if the state file's directory can't be read.
 
+### 6e. Automation recommender (offer once per repo)
+
+A second permitted boot-time prompt — but only for a repo that's never been
+offered, and only when it looks like a real project.
+
+- Gate: skip silently if `.claude/.automation-offered` exists (already offered
+  on this machine), OR if no project signal is present (none of
+  `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml` at root).
+- Otherwise ask **once**:
+  > "Scan this repo and recommend Claude Code automations (hooks, subagents, MCP servers)? [y/N]"
+  - If yes: run the `claude-automation-recommender` skill, then continue.
+  - If no / no answer: continue.
+- Either way, `mkdir -p .claude && touch .claude/.automation-offered` so it
+  never re-prompts here. Skip the touch silently if `.claude/` can't be written.
+
 ### 7. Print summary
 
 Emit summary **inside a single ``` fenced code block** (no language tag). Caveman tone — drop articles, fragments OK, short. ≤7 lines. Use these exact labels:

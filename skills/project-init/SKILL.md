@@ -272,6 +272,7 @@ from this gap):
 .claude/reviews/
 .claude/validations/
 .claude/next_prompt.md
+.claude/.automation-offered
 ```
 What writes each path (keep this list in sync if a skill adds a new scratch
 location): `scratch/` ad-hoc, `worktrees/` worktree dispatch, `plans/`
@@ -280,7 +281,8 @@ architect-handoff packet lives at `.claude/sessions/<id>/architect-handoff.md`,
 so `sessions/` already covers it), `design-targets/` `/design-match`,
 `cost-projections/` `/cost-gate`, `coverage-snapshots/` `/coverage-snapshot`,
 `reviews/` `/review-handoff`, `validations/` `/validate-output`,
-`next_prompt.md` `/handoff`.
+`next_prompt.md` `/handoff`, `.automation-offered` the once-per-repo
+automation-recommender offer in `/goodmorning` `/project-init` `/session`.
 
 **Do NOT ignore** the shared, tracked files: `.claude/stack-config.json`,
 root `CLAUDE.md`, and `docs/handoffs/` — those are committed on purpose. (The
@@ -298,6 +300,14 @@ don't need a project-level ignore.)
 - If yes: run the `/session` skill. Its "save as **project** default" writes the
   choices into this project's `stack-config.json` `session_prefs`.
 - If no: continue — defaults apply, and `/session` can be run anytime.
+
+**Offer the automation recommender.** Once, before suggesting the commit:
+> "Scan this repo and recommend Claude Code automations (hooks, subagents, MCP servers)? [y/N]"
+- If yes: run the `claude-automation-recommender` skill (read-only — it only
+  prints recommendations), then continue.
+- If no: continue.
+- Either way, `touch .claude/.automation-offered` so `/goodmorning` won't
+  re-offer on this machine.
 
 **Suggest the commit.** Do not commit automatically. Print the suggested
 command for the user to run:

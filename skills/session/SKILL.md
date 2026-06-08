@@ -71,6 +71,21 @@ Ask once via `AskUserQuestion`: "Save these as a default?"
 Print a 2-line confirmation of the active prefs and where they were saved
 (session only / global / project). Do not start other work.
 
+### 6. Offer the automation recommender (once per repo)
+
+After confirming prefs, offer a one-time repo scan — but only when it's useful:
+
+- Gate: skip silently if `.claude/.automation-offered` exists, OR if no project
+  signal (`package.json` / `pyproject.toml` / `Cargo.toml` / `go.mod` /
+  `pom.xml` at root).
+- Otherwise ask **once** via `AskUserQuestion`:
+  > "Scan this repo and recommend Claude Code automations (hooks, subagents, MCP servers)?"
+  - If yes: run the `claude-automation-recommender` skill (read-only).
+  - If no: continue.
+- Either way, `mkdir -p .claude && touch .claude/.automation-offered` so it
+  isn't re-offered here or in `/goodmorning`. Skip the touch if `.claude/`
+  can't be written.
+
 ## Notes
 
 - Precedence at session start (handled by `hooks/session-prefs-init.sh`):
