@@ -20,6 +20,8 @@
       { "from": "skills/cost-cap/SKILL.md", "to": "~/.claude/skills/cost-cap/SKILL.md" },
       { "from": "skills/tier/SKILL.md", "to": "~/.claude/skills/tier/SKILL.md" },
       { "from": "skills/session/SKILL.md", "to": "~/.claude/skills/session/SKILL.md" },
+      { "from": "skills/auto-merge/SKILL.md", "to": "~/.claude/skills/auto-merge/SKILL.md" },
+      { "from": "skills/auto-merge/templates/auto-merge.yml", "to": "~/.claude/skills/auto-merge/templates/auto-merge.yml" },
       { "from": "templates/stack-defaults.template.json", "to": "~/.claude/stack-defaults.json", "prompt_for_values": true }
     ]
   },
@@ -40,6 +42,7 @@
     "test -f ~/.claude/skills/cost-cap/SKILL.md",
     "test -f ~/.claude/skills/tier/SKILL.md",
     "test -f ~/.claude/skills/session/SKILL.md",
+    "test -f ~/.claude/skills/auto-merge/SKILL.md",
     "test -f ~/.claude/stack-defaults.json"
   ]
 }
