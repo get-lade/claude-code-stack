@@ -41,7 +41,13 @@ For first-of-its-kind crypto / auth / payment code only: after Codex, do a secon
 
 Merge both passes into the report. Attribute each finding to its source (Codex / Opus).
 
-**If Codex is unavailable:** STOP and tell the user. Do not run a Claude-only audit and call it complete — the cross-family pass is mandatory.
+**If the `codex` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-011, ADR-015) is an audit by a **non-Claude model family** — the *model*, not the *binary*:
+
+1. **CLI on PATH** (`command -v codex`) → use it for Pass 1 as above.
+2. **Else if `printenv OPENAI_API_KEY` is set** → reach GPT-5.5 another way (your choice — both satisfy ADR-011): `npm i -g @openai/codex` then run `codex exec` as above, **or** call the OpenAI API directly over HTTP with that key, feeding it the same audit prompt.
+3. **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not run a Claude-only audit and call it complete — the cross-family pass is mandatory.
+
+In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv OPENAI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
 
 ## What you do NOT do
 

@@ -36,7 +36,12 @@ the maintainer ships fast. Fast shippers don't always have time to notice patter
    ```
 2. Supplement with `cost_log` / `subagent_runs` queries (last 90 days) if Supabase is reachable.
 3. Capture and structure into the report. Do not substitute your own Claude summary for Gemini's pattern analysis.
-4. **If the Gemini CLI is unavailable:** STOP and tell the user.
+4. **If the `gemini` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-012, ADR-015) is pattern analysis by a **non-Claude model family** — the *model*, not the *binary*:
+   - **CLI on PATH** (`command -v gemini`) → use it as in step 1.
+   - **Else if `printenv GEMINI_API_KEY` is set** → reach Gemini another way (your choice — both satisfy ADR-012): `npm i -g @google/gemini-cli` then run `gemini -p` as above, **or** call the Gemini API directly over HTTP with that key, feeding it the same trend-analysis prompt.
+   - **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not substitute a Claude-only summary for the cross-family pattern analysis.
+
+   In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv GEMINI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
 
 ## Outputs
 

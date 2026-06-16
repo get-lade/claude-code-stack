@@ -1,6 +1,7 @@
 # ADR 012: Route Gemini-family work through the local Gemini CLI
 
 **Status:** Accepted
+**Amended by:** ADR-015 — in cloud, "Gemini CLI unavailable → STOP" now applies only when **both** the `gemini` CLI and `GEMINI_API_KEY` are absent; otherwise the agent reaches Gemini via the env key (ad-hoc install or direct API).
 **Date:** 2026-05-16
 **Author:** the maintainer + Claude (during Session 5 — Tier 3 install)
 

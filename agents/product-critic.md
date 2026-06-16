@@ -28,7 +28,13 @@ codex exec "You are an adversarial product critic. The proposed feature is: <fea
 
 Capture Codex's output and structure it into the format below. If Codex flags the feature as mis-scoped, relay that plainly — do not soften it.
 
-**If Codex is unavailable:** STOP and tell the user. Do not substitute a Claude-only critique — that loses the cross-lineage perspective that is the entire point of this role.
+**If the `codex` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-011, ADR-015) is a critique by a **non-Claude model family** — the *model*, not the *binary*:
+
+1. **CLI on PATH** (`command -v codex`) → use it as above.
+2. **Else if `printenv OPENAI_API_KEY` is set** → reach GPT-5.5 another way (your choice — both satisfy ADR-011): `npm i -g @openai/codex` then run `codex exec` as above, **or** call the OpenAI API directly over HTTP with that key, feeding it the same critique prompt.
+3. **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not substitute a Claude-only critique — that loses the cross-lineage perspective that is the entire point of this role.
+
+In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv OPENAI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
 
 ## Anti-patterns to flag
 

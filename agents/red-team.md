@@ -27,7 +27,13 @@ gemini --skip-trust -p "Red-team the high-stakes code in this repository: <scope
 
 Capture Gemini's output and structure it into the report below. Do not soften findings.
 
-**If the Gemini CLI is unavailable:** STOP and tell the user. Do not run a Claude-only red-team — adversarial diversity is the entire point of this role.
+**If the `gemini` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-012, ADR-015) is red-teaming by a **non-Claude model family** — the *model*, not the *binary*:
+
+1. **CLI on PATH** (`command -v gemini`) → use it as above.
+2. **Else if `printenv GEMINI_API_KEY` is set** → reach Gemini another way (your choice — both satisfy ADR-012): `npm i -g @google/gemini-cli` then run `gemini -p` as above, **or** call the Gemini API directly over HTTP with that key, feeding it the same red-team prompt.
+3. **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not run a Claude-only red-team — adversarial diversity is the entire point of this role.
+
+In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv GEMINI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
 
 ## What you do NOT do
 

@@ -28,7 +28,12 @@ After the architect produces a plan, for novel / high-stakes / hard-to-reverse d
    ```
 3. Capture Gemini's output.
 4. Structure it into the report below. Do not soften Gemini's challenges or substitute your own Claude judgment for them.
-5. **If the Gemini CLI is unavailable** (`gemini` not on PATH, or auth failed): STOP and tell the user. Do not run a Claude-only critique — that loses the cross-family perspective and whole-repo context that are the point of this role.
+5. **If the `gemini` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-012, ADR-015) is critique by a **non-Claude model family** — the *model*, not the *binary*:
+   - **CLI on PATH** (`command -v gemini`) → use it as in step 2.
+   - **Else if `printenv GEMINI_API_KEY` is set** → reach Gemini another way (your choice — both satisfy ADR-012): `npm i -g @google/gemini-cli` then run `gemini -p` as above, **or** call the Gemini API directly over HTTP with that key, feeding it the same critique prompt.
+   - **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not run a Claude-only critique — that loses the cross-family perspective and whole-repo context that are the point of this role.
+
+   In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv GEMINI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
 
 ## Inputs
 
