@@ -105,3 +105,35 @@ if bash "$TMP/stack/scripts/install.sh" --tier="$TIER" --skip-requirements; then
 else
   log "WARNING: install.sh exited non-zero; some stack pieces may be missing."
 fi
+
+# --- External-model critic CLIs (Codex / Gemini) ---------------------------
+# reviewer/security-auditor/product-critic reach GPT-5.5 via the `codex` CLI;
+# red-team/architecture-critic/historian reach Gemini via the `gemini` CLI.
+# Cloud containers don't preinstall these, but the API keys are typically set
+# as ENVIRONMENT VARIABLES (the intended cloud mechanism — see docs/CLOUD.md).
+# Install each CLI when its key is present so the critic gate runs natively
+# instead of relying on each agent's runtime fallback. Best-effort: a failure
+# here never blocks the session, and the agents still have their fallbacks.
+install_critic_cli() {
+  key_name="$1"; pkg="$2"; bin="$3"
+  if [ -z "$(printenv "$key_name" 2>/dev/null)" ]; then
+    return 0
+  fi
+  if command -v "$bin" >/dev/null 2>&1; then
+    log "$bin already on PATH; skipping $pkg install."
+    return 0
+  fi
+  if ! command -v npm >/dev/null 2>&1; then
+    log "WARNING: $key_name is set but npm is absent; cannot install $pkg. Agents will fall back at runtime."
+    return 0
+  fi
+  log "$key_name present → installing $pkg ..."
+  if npm i -g "$pkg" >/dev/null 2>&1; then
+    log "$pkg installed ($bin available)."
+  else
+    log "WARNING: 'npm i -g $pkg' failed. Agents will fall back at runtime."
+  fi
+}
+
+install_critic_cli OPENAI_API_KEY @openai/codex codex
+install_critic_cli GEMINI_API_KEY @google/gemini-cli gemini

@@ -108,6 +108,37 @@ even if the network policy blocks the clone.
 
 ---
 
+## External-model critics (Codex / Gemini) in cloud
+
+The adversarial-review agents reach a **non-Claude model family** on purpose
+(ADR-011, ADR-012): `reviewer`, `security-auditor`, `product-critic` use
+OpenAI/GPT-5.5 (the `codex` CLI); `red-team`, `architecture-critic`, `historian`
+use Gemini (the `gemini` CLI). What the gate requires is the *model*, not the
+*binary*.
+
+**In cloud, the keys belong in the environment's variables.** That is the
+intended mechanism — set `OPENAI_API_KEY` and/or `GEMINI_API_KEY` in the cloud
+environment's variable settings (web UI), the same place you set any secret for
+a cloud session. Do **not** avoid this; the agents are built to consume them.
+
+What happens at session start and at agent runtime:
+
+- **Bootstrap install (best-effort).** [`scripts/cloud-bootstrap.sh`](../scripts/cloud-bootstrap.sh)
+  checks each key with `printenv` and, when present, installs the matching CLI
+  (`npm i -g @openai/codex` / `@google/gemini-cli`) so the critic gate runs
+  natively. A failed install never blocks the session.
+- **Agent fallback ladder.** Even if the bootstrap didn't install them, each
+  critic agent walks: CLI on PATH → else key in env (`printenv OPENAI_API_KEY` /
+  `printenv GEMINI_API_KEY`) → reach the model another way (ad-hoc
+  `npm i -g …`, or call the API directly over HTTP) → STOP **only** if both the
+  CLI and the key are absent. See ADR-015.
+
+**"CLI missing" ≠ "capability missing."** A cloud session with the keys set but
+the CLIs not preinstalled is fully capable; the gate must not declare itself
+unavailable. `printenv` is how to detect the keys.
+
+---
+
 ## Verify `/goodmorning` resolves in a fresh cloud session
 
 1. Start a fresh cloud session (web or iOS) on the repo.

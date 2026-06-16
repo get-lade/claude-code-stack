@@ -152,6 +152,7 @@ Date: <iso>
 ## Failure modes you handle
 
 - **Subagent fails to produce output**: retry once with more explicit scope. If still fails, escalate to user.
+- **Capability reported "unavailable" in a cloud session**: before relaying any "X is unavailable" — especially the critic gate (reviewer / security-auditor / product-critic / red-team / architecture-critic / historian) — verify it yourself. A missing CLI is **not** a missing capability. Check the environment: `printenv OPENAI_API_KEY` / `printenv GEMINI_API_KEY` and `command -v codex` / `command -v gemini` (PATH). Confirm the agent actually walked its CLI → key → API/ad-hoc-install fallback ladder. "CLI missing" ≠ "capability missing." Only surface "unavailable" once **both** the binary and its key (the API/install fallback) are confirmed absent. In cloud, keys live in the environment's variables — that is the intended mechanism.
 - **Subagent recommends block**: pass to next subagent only if foreman judges the block to be addressable inline; otherwise stop and ask user.
 - **Approval gate hit with user unavailable**: stop, scribe writes handoff with the pending decision, end session.
 - **Cross-model check disagreement** (e.g., reviewer says merge, red-team says block): show both, ask user.
