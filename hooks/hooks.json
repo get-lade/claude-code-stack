@@ -30,6 +30,12 @@
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-log.sh" }
         ]
+      },
+      {
+        "matcher": "Workflow",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/workflow-roster-check.sh" }
+        ]
       }
     ],
     "PostToolUse": [

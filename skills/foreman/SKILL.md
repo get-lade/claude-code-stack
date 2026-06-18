@@ -93,7 +93,7 @@ For each subagent in the team:
 
 ### Parallel-mode safety (agent-teams / hybrid / dynamic-workflows)
 
-Anthropic's docs warn: **two teammates editing the same file leads to overwrites.** When any work runs in parallel, enforce these rules:
+Anthropic's docs warn: **two teammates editing the same file leads to overwrites.** When any work runs in parallel, enforce these rules. (Note: a Workflow whose `agent()` calls pass `agentType: <roster-name>` is a sanctioned parallel route — it keeps the named roles and their cross-model wiring in play.)
 
 1. **No two parallel agents may write the same file.** Before dispatching a parallel batch, partition the work by file/path ownership and state each agent's owned paths in its scope. If two agents would touch the same file, serialize them (run on main-thread) instead.
 2. **Only read-only roles parallelize freely.** reviewer, red-team, security-auditor, accessibility-auditor, validator (read-only checks), and audit-task specialists can run concurrently — they don't write source.
@@ -109,6 +109,7 @@ Anthropic's docs warn: **two teammates editing the same file leads to overwrites
 3. **Never headless without a sandbox.** Do not run dynamic workflows under `claude -p` / Agent SDK on a writable tree (no interactive edit confirmation there).
 4. **Kill-switch known.** If anything looks runaway, stop the run; org-level disable is `disableWorkflows` in settings / `CLAUDE_CODE_DISABLE_WORKFLOWS=1`.
 5. **Honor domain modes.** `financial-code`, `schema-migration`, and `sensitivity: confidential` require explicit user override (log it, same as agent-teams).
+6. **Use the roster, not generic agents.** A Workflow's default `agent()` spawns a *generic* worker — it does NOT carry the named roster's cross-model wiring (reviewer/security-auditor → Codex, red-team/architecture-critic → Gemini). When a workflow does review/audit/security/architecture work, pass `agentType: '<roster-name>'` to each `agent()` call so the real role (and its non-Claude pass) runs. A workflow is never a reason to drop cross-family review. Write-heavy workflows that name no roster `agentType` trip the `workflow-roster-check` PreToolUse hook: under `workflow_roster:"warn"` (default) it emits an advisory system-reminder (non-blocking); under `workflow_roster:"block"` the run is denied; `workflow_roster:"off"` disables warn/deny but the run is still logged. The `agentType` convention applies across `agent-teams`, `hybrid`, and `dynamic-workflows` — any `agent()` call doing review/audit/security/architecture work should pass a roster name. A Workflow whose `agent()` calls pass `agentType: <roster-name>` is the sanctioned multi-agent write path.
 
 ## Composition
 

@@ -117,6 +117,12 @@
       },
       "additionalProperties": false
     },
+    "workflow_roster": {
+      "type": "string",
+      "enum": ["warn", "block", "off"],
+      "default": "warn",
+      "description": "v1.2: Controls hooks/workflow-roster-check.sh. 'warn' (default): write-heavy Workflow runs naming no roster agentType emit a non-blocking system-reminder. 'block': such runs are denied (permissionDecision:deny). 'off': no warn/deny, but the run is still logged. Absent or invalid -> 'warn'. No auto-escalation from strict_mode/sensitivity (ADR-016)."
+    },
     "change_history": {
       "type": "array",
       "items": {

@@ -28,7 +28,9 @@ Run at the end of a working session. Writes `.claude/next_prompt.md` (the "live"
 - **Team utilization this session** (skip block if `~/.claude/logs/subagent-runs.jsonl` is missing):
   - `SESSION_START=$(cat ~/.claude/state/session-start.txt 2>/dev/null)`
   - `PROJECT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)`
-  - Counts: `jq -r --arg s "$SESSION_START" --arg p "$PROJECT" 'select(.ts >= $s) | select(.project == $p) | .agent' ~/.claude/logs/subagent-runs.jsonl | sort | uniq -c | sort -rn`
+  - Counts (direct dispatches only — exclude `agent:"workflow"` sentinel; use `// "dispatch"` guard for old rows lacking the `event` field): `jq -r --arg s "$SESSION_START" --arg p "$PROJECT" 'select(.ts >= $s) | select(.project == $p) | select((.event // "dispatch") == "dispatch") | select(.agent != "workflow") | .agent' ~/.claude/logs/subagent-runs.jsonl | sort | uniq -c | sort -rn`
+  - In-play set: union the above agent names with all names in `(.roster_agents // [])` from `event=="workflow_dispatch"` rows (same session/project filter) — roles exercised via rostered workflows count as active.
+  - Unrostered write-heavy workflows: count `event=="workflow_dispatch"` rows where `write_heavy==true` and `(.roster_agents // []) == []` and `(.uses_roster != true)`.
   - Misses: apply rules from `/team-status` Step 4 (financial-code → validator; schema-migration → data-engineer; deploy → ops; any-dispatch → architect-first).
 
 ### 4. Compose the handoff content
@@ -71,6 +73,7 @@ _Written: <YYYY-MM-DD HH:MM PT>_
 
 ## Team this session
 - Used: <comma list of agents with counts, e.g., "architect ×2, reviewer ×1">
+- Unrostered write-heavy workflows: <N> (omit line if 0)
 - Benched (should-have-fired):
   - <agent>: <rule that flagged it, e.g., "domain_mode=financial-code, no validator dispatched">
 (omit "Benched" subsection if no misses; omit whole section if no log file yet)

@@ -27,10 +27,12 @@ Surface utilization across the subagent roster: who got called, who didn't, who 
 - jq query (adjust filters for `--global` / `--session`):
   ```
   jq -r --arg cutoff "$CUTOFF" --arg project "$PROJECT" '
-    select(.ts >= $cutoff) | select(.project == $project) | .agent
+    select(.ts >= $cutoff) | select(.project == $project) | select((.event // "dispatch") == "dispatch") | select(.agent != "workflow") | .agent
   ' ~/.claude/logs/subagent-runs.jsonl | sort | uniq -c | sort -rn
   ```
 - For `--global`, drop the project filter.
+- **In-play set** = agents named in `event=="dispatch"` rows **union** all names in `(.roster_agents // [])` from `event=="workflow_dispatch"` rows (same window/project filter). Use the union as the active set for benched math (so a roster role exercised only via a Workflow still counts as in-play).
+- **Unrostered write-heavy workflows**: count `event=="workflow_dispatch"` rows where `write_heavy==true` and `(.roster_agents // []) == []` and `(.uses_roster != true)`. Print as `Workflows: N write-heavy run(s) with no roster role` (omit line if count is 0).
 
 ### 3. Compute benched
 - Benched = roster member with **zero** invocations in the window.
