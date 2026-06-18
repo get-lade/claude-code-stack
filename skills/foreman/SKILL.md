@@ -109,6 +109,7 @@ Anthropic's docs warn: **two teammates editing the same file leads to overwrites
 3. **Never headless without a sandbox.** Do not run dynamic workflows under `claude -p` / Agent SDK on a writable tree (no interactive edit confirmation there).
 4. **Kill-switch known.** If anything looks runaway, stop the run; org-level disable is `disableWorkflows` in settings / `CLAUDE_CODE_DISABLE_WORKFLOWS=1`.
 5. **Honor domain modes.** `financial-code`, `schema-migration`, and `sensitivity: confidential` require explicit user override (log it, same as agent-teams).
+6. **Use the roster, not generic agents.** A Workflow's default `agent()` spawns a *generic* worker — it does NOT carry the named roster's cross-model wiring (reviewer/security-auditor → Codex, red-team/architecture-critic → Gemini). When a workflow does review/audit/security/architecture work, pass `agentType: '<roster-name>'` to each `agent()` call so the real role (and its non-Claude pass) runs. A workflow is never a reason to drop cross-family review. Write-heavy workflows that name no roster `agentType` trip the `workflow-roster-check` PreToolUse warn hook (advisory, non-blocking).
 
 ## Composition
 
