@@ -1,3 +1,16 @@
 # Local, machine-specific Claude Code settings — never committed
 .claude/settings.local.json
 .claude/next_prompt.md
+
+# Claude Code Stack — runtime scratch, never commit
+.DS_Store
+.claude/scratch/
+.claude/worktrees/
+.claude/plans/
+.claude/sessions/
+.claude/design-targets/
+.claude/cost-projections/
+.claude/coverage-snapshots/
+.claude/reviews/
+.claude/validations/
+.claude/.automation-offered
