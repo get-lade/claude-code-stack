@@ -5,6 +5,7 @@ All notable changes to the Claude Code Stack are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- **Comprehensive workflow-roster fence (v1.2)**: `hooks/workflow-roster-check.sh` now extracts roster agent names from `agentType` declarations (both quote forms, `:` and `=`), best-effort appends a `workflow_dispatch` row with `roster_agents`/`mode`/`decision`/`script_source` on every Tier 2+ Workflow invocation (including off/quiet paths; dropped silently if log dir unwritable), and supports an opt-in `workflow_roster:"block"` mode via `stack-config.json` (default: `"warn"`; `"off"` disables warn/deny but still logs). Install coverage added: hook registered in the tier-2 manifest and the tier-2-only settings fragment `config/settings.team.template.json` (PreToolUse Workflow matcher), merged into `settings.json` at tier ≥2. Reporting in `/team-status`, `/goodmorning` Step 6b, and `/handoff` updated to exclude the `agent:"workflow"` sentinel from dispatch counts, credit roster names from `workflow_dispatch` rows toward the in-play set (via `(.roster_agents // [])`), and surface an unrostered-write-heavy-workflow count. `workflow_roster` key added to `schemas/stack-config-schema.json`. Design in ADR-016; ADR-008 addendum records the uniform agentType convention across all parallel modes. New `tests/test-workflow-roster-check.sh` covers all decision-table branches.
 - **Reconciler auto-initializes repos (`stack-config.json`)**: the org reconciler
   now also writes a default `.claude/stack-config.json` into each enrolled repo
   (tier from the admin `config.yml`), so tagged repos are initialized for foreman
@@ -85,6 +86,20 @@ All notable changes to the Claude Code Stack are documented here. Format follows
   an explicitly disabled project.)
 
 ### Fixed
+- **Tier-0/1 installs no longer wire team hooks that don't exist yet.** The
+  global settings template (`config/settings.global.template.json`, applied at
+  tier 0) referenced four hook scripts — `subagent-log.sh` (PreToolUse Agent),
+  `workflow-roster-check.sh` (PreToolUse Workflow), `subagent-complete-log.sh`
+  (PostToolUse Agent), and `dispatch-nudge.sh` (UserPromptSubmit) — that the
+  installer only copies at tier 2. A fresh tier-0/1 install got a `settings.json`
+  pointing at missing scripts, so every matching tool call tried to exec a
+  non-existent file (non-fatal but untidy; flagged in a 2026-06-18 review). Those
+  matchers now live in a tier-2-only fragment (`config/settings.team.template.json`)
+  that the installer deep-merges into `settings.json` at tier ≥2; the tier-0 base
+  carries only the Bash matcher. Behavior at tier 2 is unchanged (merge is
+  idempotent). `tests/test-install.sh` now asserts no `settings.json` hook
+  command points at a missing script for every tier; `tests/test-workflow-roster-check.sh`
+  C-merge covers the base/fragment split and re-merge idempotency.
 - **`/project-init` `.gitignore` block now covers all runtime scratch**
   (`stack_version` → `1.1.4`). The block previously only ignored
   `.claude/scratch/`, `.claude/worktrees/`, and `.claude/cost-projections/`,

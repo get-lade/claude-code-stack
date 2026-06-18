@@ -57,10 +57,17 @@ Desktop workspaces commonly open at `~/foo/` where the real git repo + `.claude/
   ```
   CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
   PROJECT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-  jq -r --arg c "$CUTOFF" --arg p "$PROJECT" 'select(.ts >= $c) | select(.project == $p) | .agent' \
-    ~/.claude/logs/subagent-runs.jsonl | sort -u
+  # dispatch rows: agent names from direct dispatches (exclude agent:"workflow" sentinel)
+  # workflow_dispatch rows: union in roster_agents[] names so rostered workflows credit their roles
+  jq -r --arg c "$CUTOFF" --arg p "$PROJECT" '
+    select(.ts >= $c) | select(.project == $p) |
+    if ((.event // "dispatch") == "dispatch") and .agent != "workflow" then .agent
+    elif .event == "workflow_dispatch" then (.roster_agents // [])[]
+    else empty end
+  ' ~/.claude/logs/subagent-runs.jsonl | sort -u
   ```
 - Benched = roster minus active. Drop obvious-meta names (`historian`, `librarian`, `incident-commander`, `scribe`) — those don't fire routinely.
+- **Unrostered write-heavy workflows**: count rows where `event=="workflow_dispatch"` and `write_heavy==true` and `(.roster_agents // []) == []` and `(.uses_roster != true)`. If count > 0, append to the `Watch:` line: `<N> write-heavy workflow(s) with no roster role`.
 
 ### 6c. Stack freshness check (skip silently if helper missing)
 

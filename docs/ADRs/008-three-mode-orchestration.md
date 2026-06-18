@@ -83,3 +83,7 @@ implementation on the main-thread, and treat Dynamic Workflows as
 - v1.1 corrections changelog
 - Conversation between the maintainer and Claude on 2026-05-15 (post-review)
 - Conversation between the maintainer and Claude on 2026-05-30 (Opus 4.8 review)
+
+## Addendum (v1.2, 2026-06-18): roster convention across parallel modes
+
+The agentType convention is now uniform across `agent-teams`, `hybrid`, and `dynamic-workflows`: any agent() call that does review/audit/security/architecture work passes agentType: <roster-name> so the named role and its non-Claude pass (reviewer/security-auditor → Codex, red-team/architecture-critic → Gemini) run. Write-heavy Workflow runs that name no roster agentType are fenced by hooks/workflow-roster-check.sh; the warn-vs-block decision and the workflow_roster config key are recorded in ADR-016.

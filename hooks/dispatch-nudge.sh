@@ -38,7 +38,7 @@ TIER="$(jq -r '.stack_tier // 0' "$CONFIG" 2>/dev/null)"
 # Inject reminder. The hook's stdout is appended to the model's context.
 cat <<EOF
 <system-reminder>
-Dispatch nudge: this prompt looks like multi-step engineering work in a Tier $TIER project. Consider routing it via /foreman or /dispatch so the right subagents handle it (architect → implementer → validator → reviewer). If you've already decided this is single-edit / trivial work, ignore this and proceed directly.
+Dispatch nudge: this prompt looks like multi-step engineering work in a Tier $TIER project. Consider routing it via /foreman or /dispatch so the right subagents handle it (architect → implementer → validator → reviewer). Or, for parallel read-only fan-out, a Workflow whose agent() calls pass agentType: <roster-name> keeps the named roles (and their Codex/Gemini wiring) in play. If you've already decided this is single-edit / trivial work, ignore this and proceed directly.
 </system-reminder>
 EOF
 

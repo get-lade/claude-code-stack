@@ -40,10 +40,6 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/brevity-drift.sh"
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/dispatch-nudge.sh"
           }
         ]
       }
@@ -57,15 +53,6 @@
             "command": "~/.claude/hooks/bulk-job-reminder.sh"
           }
         ]
-      },
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/subagent-log.sh"
-          }
-        ]
       }
     ],
     "PostToolUse": [
@@ -75,15 +62,6 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/post-tool-tsc.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/subagent-complete-log.sh"
           }
         ]
       }
