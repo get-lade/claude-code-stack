@@ -3,7 +3,15 @@
 _Written: 2026-06-19 (ADR-017 implementation session)_
 
 ## Resume prompt
-> "ADR-017 is fully implemented — push chore/tier-4-bump, open the PR, run scripts/update.sh."
+> "Push chore/tier-4-bump + PR; then build ADR-018 (Setup Dashboard: rename /config→/stack-config + native-settings-edit)."
+
+## TOP PRIORITY NEXT SESSION — build ADR-018 (Setup Dashboard)
+ADR-017 Feature C (`/config`) was a scope miss: the user wanted a control panel over ALL Claude Code settings, not just the stack's 13. Re-planned as **[ADR-018](docs/ADRs/018-settings-dashboard.md)** (Accepted) — build deferred to next session. Cross-model: product-critic (Codex) + red-team (Gemini, BLOCKED the first design on 3 native-write RCE vectors → 10 fixes folded into a 12-item security contract).
+- **Rename** `/config` → `/stack-config` (cede `/config` to Claude Code's built-in); old path becomes a `model-invocable:false` forwarding stub.
+- **New skill `native-settings-edit`** = the ONLY writer of native `settings.json`. MUST implement all 12 contract items (set-at-path not merge; RFC-6901 pointers; per-path value schema; audited statusLine preset constant; `--dry-run`; atomic write + flock; cloud-gate inside the tool; default scope=project + `--confirm-global`; hard-refuse hooks/env/permissions; sanitized errors). **Do not ship a partial implementation — partial = the RCE vectors reopen.**
+- Dashboard = read-first, 3 row states ([edit]/[review]/[native]); safe-write allowlist only (model, outputStyle, statusLine preset, plugin/MCP enable-disable); hooks/env/permissions read-only or diff-only; cloud read-only.
+- Follow ADR-018 §Migration (9 ordered steps): git mv, stub, new writer, manifest repoint + new entries + smoke tests, registry regen + `--check`, ADR-017 supersede note (done), update /default-settings + /default-edit forwarding, repo-wide `grep '/config\b'` reclassify.
+- After build: validator + cross-model reviewer (Codex) + a fresh red-team (Gemini) pass on the native writer, then scribe + review-handoff.
 
 ## Branch & state — ADR-017 COMPLETE
 - Branch: `chore/tier-4-bump` — **8 commits ahead of `main`, not yet pushed** (sandbox cannot push `main` or open PRs).
