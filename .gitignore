@@ -13,3 +13,7 @@
 .claude/reviews/
 .claude/validations/
 .claude/.automation-offered
+
+# Python bytecode cache
+__pycache__/
+*.pyc
