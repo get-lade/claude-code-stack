@@ -323,3 +323,13 @@ are **shared, tracked files** (like `stack-config.json`) — the `.gitignore`
 block above ignores only runtime scratch, so these are not affected.
 
 After this, foreman is unlocked for the project (strict mode satisfied).
+
+**Point the user at the Setup Dashboard (final step — tier ≥2 only).** Users
+won't discover `/stack-config` unless init shows it. After the commit suggestion,
+offer once:
+> "Setup complete. `/stack-config` (the Setup Dashboard) shows your whole setup —
+> stack + native settings, scope-resolved — and safely changes the common ones.
+> Want to see it now? [y/N]"
+- If yes: run `/stack-config show-current` (read-only — no changes).
+- If no / tier <2: continue (skip silently below tier 2, where the dashboard
+  isn't installed).
