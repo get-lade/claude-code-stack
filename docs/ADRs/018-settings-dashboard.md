@@ -105,6 +105,16 @@ hooks → inventory (matcher + path, counts; commands truncated) · change = dif
 - **Security posture:** writable surface is a closed enumeration enforced in two places (dashboard routing + writer self-validation); hooks/env/permissions/raw-MCP are structurally unreachable from any write path; worst case from a compromised prompt is flipping model/outputStyle/a toggle/a statusLine preset, or printing a diff. Contingent on ALL 12 contract items shipping — partial implementation reopens the RCE vectors.
 - **Negative / accepted risk:** a new writer on a sensitive file (mitigated by set-at-path + allowlist self-check + atomic write); preset lists need maintenance as Claude Code evolves (invalid values fall through to diff-only).
 
+### Build verification (2026-06-19) + accepted residuals
+Implemented and verified across four cross-model passes (Gemini CLI was account-tier-blocked; the red-team ran via **Codex** with the maintainer's sign-off — cross-model, not Claude-only). Passes: red-team (Codex, 66 probes — no bypass) → reviewer (Codex) → security-auditor (Codex) ×2 + an Opus belt-and-suspenders pass. Three findings were fixed and regression-tested (`tests/test-native-settings-edit.sh`, 47 cases):
+1. `--scope project --repo-root <home>` resolved to `~/.claude/settings.json` and skipped `--confirm-global` → fixed with `_is_user_global()` (symlink- and case-insensitive-FS-robust).
+2. `settings.json.tmp` written via `open("w")` followed a planted symlink → RCE copying project `hooks` into the user-global file → fixed with `tempfile.mkstemp` (unpredictable name + `O_EXCL`).
+3. `settings.json.lock` `open("w")` truncated through a symlink → fixed with `os.open(..., O_NOFOLLOW)` + no-truncate, plus a TOCTOU re-check of the user-global guard under the flock.
+
+**Accepted residuals (out of the documented threat model = *hostile repo contents*, NOT a same-UID concurrent attacker):**
+- **MEDIUM — residual TOCTOU.** A same-UID process could race-swap `<repo>/.claude` → `~/.claude` in the sub-ms window between the in-lock guard re-check and `mkstemp`/`os.replace`. An attacker with that capability can already write `~/.claude/settings.json` directly. A full fix needs `O_DIRECTORY`/`openat` fd-chaining (C/`ctypes`, not stdlib) — declined per KISS/YAGNI; tracked here.
+- **LOW — orphan lock.** If `<repo>/.claude` is itself a symlink to `~/.claude`, the lock `os.open` (final-component `O_NOFOLLOW` only) can create `~/.claude/settings.json.lock` before the in-lock guard refuses the data write. No data is written; worst case is a spurious "suspicious lock file" refusal on a later write.
+
 ## Migration from the shipped `/config` (implementer steps — no code here)
 1. `git mv skills/config skills/stack-config`; `name: stack-config`; extend ops + add native sections.
 2. Recreate `skills/config/SKILL.md` as the `model-invocable:false` forwarding stub.
