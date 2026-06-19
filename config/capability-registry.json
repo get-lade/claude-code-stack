@@ -1,0 +1,760 @@
+{
+  "generated_at": "2026-06-19T17:12:25Z",
+  "stack_version": "1.1.3",
+  "capabilities": [
+    {
+      "id": "accessibility-auditor",
+      "kind": "subagent",
+      "summary": "Use for UI changes \u2014 new pages, new components, dashboard work.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "use for UI changes \u2014 new pages, new components, dashboard work"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "adr",
+      "kind": "skill",
+      "summary": "Create or update an Architecture Decision Record.",
+      "invocation": {
+        "slash": "/adr",
+        "natural_language": "create or update an Architecture Decision Record"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "agent-performance-review",
+      "kind": "skill",
+      "summary": "Run monthly to evaluate how each subagent has actually performed over the last 30 days.",
+      "invocation": {
+        "slash": "/agent-performance-review",
+        "natural_language": "run monthly to evaluate how each subagent has actually performed over the last 30 days"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "agent-teams",
+      "kind": "skill",
+      "summary": "Shortcut to flip orchestration mode.",
+      "invocation": {
+        "slash": "/agent-teams",
+        "natural_language": "shortcut to flip orchestration mode"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "architect",
+      "kind": "subagent",
+      "summary": "Designs before code.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "designs before code"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "architecture-critic",
+      "kind": "subagent",
+      "summary": "Use AFTER architect on novel features, or for any architectural decision that locks the system into a direction.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "use AFTER architect on novel features, or for any architectural decision that locks the system into a direction"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "auto-merge",
+      "kind": "skill",
+      "summary": "Per-repo opt-in for GitHub auto-merge gated on a required `run-tests` status check.",
+      "invocation": {
+        "slash": "/auto-merge",
+        "natural_language": "per-repo opt-in for GitHub auto-merge gated on a required `run-tests` status check"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "claude-automation-recommender",
+      "kind": "skill",
+      "summary": "Analyze a codebase and recommend Claude Code automations (hooks, subagents, skills, plugins, MCP servers).",
+      "invocation": {
+        "slash": "/claude-automation-recommender",
+        "natural_language": "analyze a codebase and recommend Claude Code automations (hooks, subagents, skills, plugins, MCP servers)"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "cloud-setup",
+      "kind": "skill",
+      "summary": "Print the one-time setup script that enables the stack's skills/commands in Claude Code cloud sessions (web + iOS) for a given environment.",
+      "invocation": {
+        "slash": "/cloud-setup",
+        "natural_language": "print the one-time setup script that enables the stack's skills/commands in Claude Code cloud sessions (web + iOS) for a given environment"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "config",
+      "kind": "skill",
+      "summary": "Single front door for all stack settings.",
+      "invocation": {
+        "slash": "/config",
+        "natural_language": "single front door for all stack settings"
+      },
+      "tier_min": 2,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": false
+    },
+    {
+      "id": "cost-cap",
+      "kind": "skill",
+      "summary": "Shortcut to set per-session and per-day cost protection.",
+      "invocation": {
+        "slash": "/cost-cap",
+        "natural_language": "shortcut to set per-session and per-day cost protection"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "cost-gate",
+      "kind": "skill",
+      "summary": "Run before any bulk LLM job (>100 rows or any LLM-per-row script).",
+      "invocation": {
+        "slash": "/cost-gate",
+        "natural_language": "run before any bulk LLM job (>100 rows or any LLM-per-row script)"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "coverage-snapshot",
+      "kind": "skill",
+      "summary": "Run before any bulk data operation that updates existing rows (enrichment, backfill, migration).",
+      "invocation": {
+        "slash": "/coverage-snapshot",
+        "natural_language": "run before any bulk data operation that updates existing rows (enrichment, backfill, migration)"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "data-engineer",
+      "kind": "subagent",
+      "summary": "Use for schema design, migrations, idempotency design, data quality, ETL/ELT pipelines, normalization/denormalization decisions.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "use for schema design, migrations, idempotency design, data quality, ETL/ELT pipelines, normalization/denormalization decisions"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "default-edit",
+      "kind": "skill",
+      "summary": "Interactive editor for stack configuration.",
+      "invocation": {
+        "slash": "/default-edit",
+        "natural_language": "interactive editor for stack configuration"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "default-settings",
+      "kind": "skill",
+      "summary": "Read-only view of stack configuration.",
+      "invocation": {
+        "slash": "/default-settings",
+        "natural_language": "read-only view of stack configuration"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "deploy-edge",
+      "kind": "skill",
+      "summary": "Deploy a Supabase edge function with all guardrails.",
+      "invocation": {
+        "slash": "/deploy-edge",
+        "natural_language": "deploy a Supabase edge function with all guardrails"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "design-match",
+      "kind": "skill",
+      "summary": "Match UI implementation to a design prototype.",
+      "invocation": {
+        "slash": "/design-match",
+        "natural_language": "match UI implementation to a design prototype"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "designer",
+      "kind": "subagent",
+      "summary": "Visual + system design.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "visual + system design"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "dispatch",
+      "kind": "skill",
+      "summary": "Manually dispatch a task to a specific subagent team.",
+      "invocation": {
+        "slash": "/dispatch",
+        "natural_language": "manually dispatch a task to a specific subagent team"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "documenter",
+      "kind": "subagent",
+      "summary": "Writes/updates docs in parallel with implementer.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "writes/updates docs in parallel with implementer"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "domain-mode",
+      "kind": "skill",
+      "summary": "Shortcut to set the project's domain mode.",
+      "invocation": {
+        "slash": "/domain-mode",
+        "natural_language": "shortcut to set the project's domain mode"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "estimator",
+      "kind": "subagent",
+      "summary": "Use before starting non-trivial work to estimate effort, cost, and risk.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "use before starting non-trivial work to estimate effort, cost, and risk"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "eval-bump",
+      "kind": "skill",
+      "summary": "Improve evaluation suites (golden sets, classifiers, NL\u2192SQL accuracy).",
+      "invocation": {
+        "slash": "/eval-bump",
+        "natural_language": "improve evaluation suites (golden sets, classifiers, NL\u2192SQL accuracy)"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "foreman",
+      "kind": "skill",
+      "summary": "The orchestrator.",
+      "invocation": {
+        "slash": "/foreman",
+        "natural_language": "the orchestrator"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "foreman-team-lead",
+      "kind": "subagent",
+      "summary": "Team-lead subagent for Anthropic's Agent Teams orchestration mode.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "team-lead subagent for Anthropic's Agent Teams orchestration mode"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "goodmorning",
+      "kind": "skill",
+      "summary": "Boot a Claude Code session with full context.",
+      "invocation": {
+        "slash": "/goodmorning",
+        "natural_language": "boot a Claude Code session with full context"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "handoff",
+      "kind": "skill",
+      "summary": "Write a handoff doc to .claude/next_prompt.md so the next Claude Code session can resume cleanly.",
+      "invocation": {
+        "slash": "/handoff",
+        "natural_language": "write a handoff doc to .claude/next_prompt.md so the next Claude Code session can resume cleanly"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "historian",
+      "kind": "subagent",
+      "summary": "Use periodically (monthly, or on demand) to read all archived handoffs + ADRs + postmortems + cost logs and surface patterns.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "use periodically (monthly, or on demand) to read all archived handoffs + ADRs + postmortems + cost logs and surface patterns"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "implementer",
+      "kind": "subagent",
+      "summary": "Writes code to match the architect's handoff packet.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "writes code to match the architect's handoff packet"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "incident-commander",
+      "kind": "subagent",
+      "summary": "Use when production is broken.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "use when production is broken"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "integration-specialist",
+      "kind": "subagent",
+      "summary": "Use when working with external APIs \u2014 Pipedream, Xero, Twilio, Slack, OpenAI/Anthropic/Google APIs, Stripe, anything with a vendor SDK.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "use when working with external APIs \u2014 Pipedream, Xero, Twilio, Slack, OpenAI/Anthropic/Google APIs, Stripe, anything with a vendor SDK"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "librarian",
+      "kind": "subagent",
+      "summary": "Curates the stack itself \u2014 deprecates stale skills, consolidates overlapping ones, updates skill descriptions for better triggering, surfaces unused subagents.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "curates the stack itself \u2014 deprecates stale skills, consolidates overlapping ones, updates skill descriptions for better triggering, surfaces unused subagents"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "local-ops",
+      "kind": "subagent",
+      "summary": "Variant of ops for tasks where data must NOT leave the laptop \u2014 sensitive financial exports, prod data inspection, anything user marks confidential.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "variant of ops for tasks where data must NOT leave the laptop \u2014 sensitive financial exports, prod data inspection, anything user marks confidential"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "model-audit",
+      "kind": "skill",
+      "summary": "Run monthly (or on demand) to audit subagent model assignments against current benchmarks and pricing.",
+      "invocation": {
+        "slash": "/model-audit",
+        "natural_language": "run monthly (or on demand) to audit subagent model assignments against current benchmarks and pricing"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "operating",
+      "kind": "skill",
+      "summary": "Show how to operate Claude Code with the stack \u2014 what you actively do (/goodmorning, /handoff, /project-init, /budget-guard), what happens automatically (foreman orchestration, domain-mode review, approval gates), the per-repo tier/domain table, and where ADRs/runbooks live.",
+      "invocation": {
+        "slash": "/operating",
+        "natural_language": "show how to operate Claude Code with the stack \u2014 what you actively do (/goodmorning, /handoff, /project-init, /budget-guard), what happens automatically (foreman orchestration, domain-mode review, approval gates), the per-repo tier/domain table, and where ADRs/runbooks live"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "ops",
+      "kind": "subagent",
+      "summary": "Owns deploy verification, MCP health checks, secret rotation reminders, cost-log queries.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "owns deploy verification, MCP health checks, secret rotation reminders, cost-log queries"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "performance-engineer",
+      "kind": "subagent",
+      "summary": "Use for query plan reasoning, N+1 detection, RPC perf, index design, LATERAL JOIN evaluation, dashboard load-time work.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "use for query plan reasoning, N+1 detection, RPC perf, index design, LATERAL JOIN evaluation, dashboard load-time work"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "plan",
+      "kind": "skill",
+      "summary": "Use BEFORE writing any code for non-trivial tasks (anything beyond a 1-line fix).",
+      "invocation": {
+        "slash": "/plan",
+        "natural_language": "use BEFORE writing any code for non-trivial tasks (anything beyond a 1-line fix)"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "product-critic",
+      "kind": "subagent",
+      "summary": "Adversarially challenges WHAT is being built \u2014 not how.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "adversarially challenges WHAT is being built \u2014 not how"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "project-init",
+      "kind": "skill",
+      "summary": "Initialize a project for use with the Claude Code Stack.",
+      "invocation": {
+        "slash": "/project-init",
+        "natural_language": "initialize a project for use with the Claude Code Stack"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "recommend-capabilities",
+      "kind": "skill",
+      "summary": "Core recommendation engine for stack capabilities.",
+      "invocation": {
+        "slash": "/recommend-capabilities",
+        "natural_language": "core recommendation engine for stack capabilities"
+      },
+      "tier_min": 2,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": false
+    },
+    {
+      "id": "red-team",
+      "kind": "subagent",
+      "summary": "Actively tries to break things.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "actively tries to break things"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "review-handoff",
+      "kind": "skill",
+      "summary": "Use BEFORE declaring any multi-artifact deliverable done.",
+      "invocation": {
+        "slash": "/review-handoff",
+        "natural_language": "use BEFORE declaring any multi-artifact deliverable done"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "reviewer",
+      "kind": "subagent",
+      "summary": "Adversarial cold-read of the diff before merge.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "adversarial cold-read of the diff before merge"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "runbook",
+      "kind": "skill",
+      "summary": "Create or update an operational runbook.",
+      "invocation": {
+        "slash": "/runbook",
+        "natural_language": "create or update an operational runbook"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "scribe",
+      "kind": "subagent",
+      "summary": "At session end, produces the /handoff doc and archives it.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "at session end, produces the /handoff doc and archives it"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "security-auditor",
+      "kind": "subagent",
+      "summary": "Proactive security review.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "proactive security review"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "sensitivity",
+      "kind": "skill",
+      "summary": "Shortcut to set the project's data sensitivity level.",
+      "invocation": {
+        "slash": "/sensitivity",
+        "natural_language": "shortcut to set the project's data sensitivity level"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "session",
+      "kind": "skill",
+      "summary": "Set your communication and working preferences for this session via a multiple-choice menu.",
+      "invocation": {
+        "slash": "/session",
+        "natural_language": "set your communication and working preferences for this session via a multiple-choice menu"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "strict-mode",
+      "kind": "skill",
+      "summary": "Shortcut to toggle foreman's strict mode for the current project.",
+      "invocation": {
+        "slash": "/strict-mode",
+        "natural_language": "shortcut to toggle foreman's strict mode for the current project"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "suggest",
+      "kind": "skill",
+      "summary": "Suggest which stack skills or subagents apply to the current task.",
+      "invocation": {
+        "slash": "/suggest",
+        "natural_language": "suggest which stack skills or subagents apply to the current task"
+      },
+      "tier_min": 2,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "team-init",
+      "kind": "skill",
+      "summary": "Scaffold the org admin repo that auto-installs the Claude Code Stack cloud bootstrap across a GitHub org/team.",
+      "invocation": {
+        "slash": "/team-init",
+        "natural_language": "scaffold the org admin repo that auto-installs the Claude Code Stack cloud bootstrap across a GitHub org/team"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "team-status",
+      "kind": "skill",
+      "summary": "Show which subagents have been getting work, which are benched, and (with --replan) propose how to bring benched roles into the current work.",
+      "invocation": {
+        "slash": "/team-status",
+        "natural_language": "show which subagents have been getting work, which are benched, and (with --replan) propose how to bring benched roles into the current work"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "tester",
+      "kind": "subagent",
+      "summary": "Writes the durable test suite.",
+      "invocation": {
+        "slash": null,
+        "natural_language": "writes the durable test suite"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "tier",
+      "kind": "skill",
+      "summary": "Shortcut to view or change the project's stack tier (0-5).",
+      "invocation": {
+        "slash": "/tier",
+        "natural_language": "shortcut to view or change the project's stack tier (0-5)"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "validate-output",
+      "kind": "skill",
+      "summary": "Use AFTER implementing financial code or anything where output VALUES matter (not just shapes).",
+      "invocation": {
+        "slash": "/validate-output",
+        "natural_language": "use AFTER implementing financial code or anything where output VALUES matter (not just shapes)"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "validator",
+      "kind": "subagent",
+      "summary": "Runs the code with real or representative data and asserts that output values match expectations (not just shapes).",
+      "invocation": {
+        "slash": null,
+        "natural_language": "runs the code with real or representative data and asserts that output values match expectations (not just shapes)"
+      },
+      "tier_min": 0,
+      "user_invocable": false,
+      "model_invocable": true,
+      "recommendable": true
+    }
+  ]
+}

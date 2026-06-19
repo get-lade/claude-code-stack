@@ -18,6 +18,12 @@ STATE_DIR="$HOME/.claude/session-state"
 OUT="$STATE_DIR/current-prefs.json"
 mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
 
+# Dedupe flags are session-scoped (passive_suggest.<session_id>.nudged), so a
+# new session simply starts with no flag. Prune stale flags (>1 day) so they
+# don't accumulate, and clear any legacy machine-global flag from older builds.
+find "$STATE_DIR" -maxdepth 1 -name 'passive_suggest.*.nudged' -mtime +0 -delete 2>/dev/null || true
+rm -f "$STATE_DIR/passive_suggest.nudged" 2>/dev/null || true
+
 command -v jq >/dev/null 2>&1 || exit 0
 
 INPUT="$(cat 2>/dev/null || echo '{}')"
@@ -25,7 +31,7 @@ CWD="$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)"
 [ -z "$CWD" ] && CWD="$PWD"
 
 # Built-in baseline (matches the schema defaults).
-BUILTIN='{"communication_style":"balanced","model_effort":"balanced","explanation_verbosity":"normal","cost_alert_sensitivity":"normal"}'
+BUILTIN='{"communication_style":"balanced","model_effort":"balanced","explanation_verbosity":"normal","orchestration_mode":"main-thread","cost_alert_sensitivity":"normal","passive_suggest":true}'
 
 # Global defaults layer.
 G='{}'

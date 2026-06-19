@@ -3,6 +3,8 @@ name: default-settings
 description: Read-only view of stack configuration. Shows global defaults (~/.claude/stack-defaults.json), current project's stack-config.json, and where each setting comes from (global default, project override, env var). Flags divergence between global default and current project. Useful for "wait, what mode am I in?" moments.
 ---
 
+> **Note:** `/config show-current` is now the single front door for viewing settings — it supersedes this skill, adds session-pref display, and redacts secrets. This skill remains functional but `/config` is preferred.
+
 # /default-settings
 
 Show me what's configured and where it came from.
@@ -19,6 +21,8 @@ For each setting group (Tier/scope, Orchestration, Subagents, Cost, Project):
 - Show current project value (if exists)
 - Show "source" of effective value (global | project | env-var)
 - Flag divergence with ⚠️
+
+**Never print secrets.** Redact the entire `providers` block (e.g. `anthropic_key_keychain_item`, `openai_key_keychain_item`, `google_ai_key_keychain_item`, any `supabase` ref) and any field whose name contains secret/key/token/password/keychain. If present, print one line: `[providers / secrets: redacted]`.
 
 ### 3. Print summary
 ```

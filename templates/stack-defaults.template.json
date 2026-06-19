@@ -33,6 +33,7 @@
     "communication_style": "balanced",
     "model_effort": "balanced",
     "explanation_verbosity": "normal",
-    "cost_alert_sensitivity": "normal"
+    "cost_alert_sensitivity": "normal",
+    "passive_suggest": true
   }
 }
