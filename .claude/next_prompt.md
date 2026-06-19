@@ -3,14 +3,16 @@
 _Written: 2026-06-19 (ADR-017 implementation session)_
 
 ## Resume prompt
-> "Continue ADR-017 — build slice C (/config router), then wire slices into install."
+> "Finish ADR-017 — do the install wiring (tier manifest + registry copy + CI freshness hook)."
 
 ## Branch & state
-- Branch: `chore/tier-4-bump` — **4 commits ahead of `main`, not yet pushed** (sandbox cannot push `main` or open PRs).
+- Branch: `chore/tier-4-bump` — **6 commits ahead of `main`, not yet pushed** (sandbox cannot push `main` or open PRs).
   1. `22ea21c` chore: bump dogfood project to Tier 4
   2. `fc03e36` docs(adr): accept ADR-017
   3. `d0aaf3b` feat: slice 1 — registry + engine + /suggest
   4. `53e313a` feat: slice B — passive_suggest folded into dispatch-nudge
+  5. `fee4f6b` docs(handoff)
+  6. `24c8cb8` feat: slice C — /config router + engine mode:settings
 - Working tree clean except untracked local artifacts under `.claude/sessions/` + `.claude/reviews/` (gitignored — keep local).
 - **First action next session:** push `chore/tier-4-bump` and open a PR to `main` (this is the human/desktop step; sandbox can't).
 
@@ -19,17 +21,20 @@ _Written: 2026-06-19 (ADR-017 implementation session)_
 - **ADR-017 accepted** (`docs/ADRs/017-capability-recommender.md`) — full cross-model plan: product-critic + reviewer (Codex) ∥ red-team (Gemini), review-handoff APPROVE.
 - **Slice 1**: `scripts/gen-capability-registry.sh` (python3 stdlib, `--check` freshness gate), committed `config/capability-registry.json` (57 caps), `skills/recommend-capabilities/` engine, `skills/suggest/`. Codex review fixes folded in.
 - **Slice B**: `passive_suggest` folded into `hooks/dispatch-nudge.sh` (session-scoped dedupe, fail-open, cloud project-layer fallback, jq `//`-false-collapse avoided) + `hooks/session-prefs-init.sh`, both schemas, `templates/stack-defaults.template.json`, `/session` menu, new `tests/test-session-prefs-parity.sh`. All 9 test files pass.
+- **Slice C**: `skills/config/` router (4 ops, hardcoded goal recipes, allowlist/denylist, secret redaction, routes all mutations through owning skills) + engine `mode:settings` spec + `/default-settings`/`/default-edit` deprecation notices. Codex review closed the mutation-abuse bypasses (denylist self-enforced at the /config boundary; engine no longer routes via generic `default-edit`; recipe arg + redaction fixed). 58-cap registry, `--check` green, all tests pass.
 
-## Exact next steps
+## Exact next steps (ONLY install wiring left)
 1. **Push branch + open PR** (human step). Verify CI.
-2. **Slice C — `/config` router** (`skills/config/SKILL.md`), per ADR-017 Feature C:
-   - 4 ops: show-current (redact `providers`), recommended-changes (engine `mode:settings`), change-one-setting (route to owning skill), guided-setup-by-goal.
-   - op4 constrained: hardcoded goal→recipe table + allowlist + **denylist** (`required_approvals`, cost caps, `providers`/secrets) + mandatory per-change confirm.
-   - Single front door: add deprecation/forwarding notices to `/default-settings` + `/default-edit`.
-   - Engine `mode:settings` needs its full spec written (currently stubbed in `skills/recommend-capabilities/SKILL.md`).
-   - Mark `config` non-recommendable (generator already excludes it; add `recommendable: false` frontmatter to be explicit) and regenerate the registry.
-3. **Install wiring** (so /suggest + /config actually ship): add the 3 new skills to a tier manifest (`config/tier-manifests/tier-2.json`, tier_min 2); add the committed registry to the manifest file-copy; add a CI/pre-commit **freshness hook** running `scripts/gen-capability-registry.sh --check`.
-4. Regenerate registry after adding `/config`; run `--check`; run full test suite; cross-model reviewer pass on slice C; then scribe + review-handoff.
+2. **Install wiring** — make slices ship on installs/cloud:
+   - Add the 3 new skills (`recommend-capabilities`, `suggest`, `config`) to `config/tier-manifests/tier-2.json` (tier_min 2).
+   - Add `config/capability-registry.json` to the manifest file-copy so it lands in installs.
+   - Add a CI / pre-commit **freshness hook** running `scripts/gen-capability-registry.sh --check` (fails the build if the committed registry is stale).
+   - Run `scripts/update.sh` on each machine to pick up the new global skills/hooks.
+3. Final: run full test suite + a cross-model reviewer pass on the wiring, then scribe + `/review-handoff`.
+
+## Known out-of-scope (pre-existing, not ADR-017)
+- `/default-edit` remains a direct unrestricted config editor (its purpose). `/config` no longer routes to it; deprecation notice steers users to `/config`. Locking down direct `/default-edit` use is a separate hardening effort.
+- Several setting-skills (`/strict-mode`, `/sensitivity`, `/domain-mode`, `/cost-cap`, `/agent-teams`) apply on selection without a second confirm — `/config`'s own selection step is the consent gate for op2/op4; op3 is explicit user intent. Adding universal pre-write confirms to those skills is a separate change.
 
 ## Deferred minor items (from slice-1 reviewer, capture during slice C / wiring)
 - `gen-capability-registry.sh` parser is python3 stdlib (dev-time dep; registry is committed so no install-time dep).
