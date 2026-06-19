@@ -159,11 +159,11 @@ def _reject_container(raw):
 
 
 def coerce_bool(raw):
-    """L1 — accept ONLY the literal tokens true/false. String 'false' refused."""
-    s = raw.strip()
-    if s == "true":
+    """L1 — accept ONLY the literal tokens true/false: no surrounding
+    whitespace, no 'False'/'0'/'yes', no quoted-string '"false"'."""
+    if raw == "true":
         return True
-    if s == "false":
+    if raw == "false":
         return False
     raise Refused("boolean field accepts only the literal values true or false")
 
@@ -214,18 +214,46 @@ def _claude_home():
     return os.environ.get("CLAUDE_SETTINGS_HOME", os.path.expanduser("~"))
 
 
+def _user_global_path():
+    return os.path.join(_claude_home(), ".claude", "settings.json")
+
+
+def _is_user_global(target):
+    """True if `target` refers to ~/.claude/settings.json — robust to symlinks
+    and case-insensitive filesystems, so --repo-root cannot smuggle the global
+    file in under project scope (red-team / Codex finding #1)."""
+    ug = _user_global_path()
+    t_dir, ug_dir = os.path.dirname(target), os.path.dirname(ug)
+    try:
+        if os.path.exists(t_dir) and os.path.exists(ug_dir) and os.path.samefile(t_dir, ug_dir):
+            return True
+    except OSError:
+        pass
+    rt, rg = os.path.realpath(target), os.path.realpath(ug)
+    if rt == rg:
+        return True
+    if sys.platform == "darwin" and rt.lower() == rg.lower():
+        return True
+    return False
+
+
 def resolve_target(scope, repo_root, confirm_global):
+    if scope not in ("project", "user"):
+        raise Refused("scope must be 'project' or 'user'")
     if scope == "user":
-        if not confirm_global:
-            raise Refused(
-                "writing user scope (~/.claude/settings.json) affects every "
-                "project — re-run with --confirm-global"
-            )
-        return os.path.join(_claude_home(), ".claude", "settings.json")
-    if scope == "project":
+        target = _user_global_path()
+    else:
         root = repo_root or os.getcwd()
-        return os.path.join(root, ".claude", "settings.json")
-    raise Refused("scope must be 'project' or 'user'")
+        target = os.path.join(root, ".claude", "settings.json")
+    # M2 — any resolution to the user-global file requires --confirm-global,
+    # even under project scope via --repo-root (blast-radius control).
+    if _is_user_global(target) and not confirm_global:
+        raise Refused(
+            "this resolves to the user-global settings file "
+            "(~/.claude/settings.json), which affects every project — "
+            "re-run with --scope user --confirm-global"
+        )
+    return target
 
 
 # --- Safe file load (item 10 / M4) ------------------------------------------
@@ -299,17 +327,23 @@ def atomic_write(path, mutate):
     target_dir = os.path.dirname(path)
     os.makedirs(target_dir, exist_ok=True)
     lock_path = path + ".lock"
+    tmp_path = path + ".tmp"
     with open(lock_path, "w") as lock_fh:
         fcntl.flock(lock_fh, fcntl.LOCK_EX)
         try:
             data = load_settings(path)  # re-read under lock
             data = mutate(data)
-            tmp_path = path + ".tmp"
             with open(tmp_path, "w", encoding="utf-8") as out:
                 json.dump(data, out, indent=2, ensure_ascii=False)
                 out.write("\n")
             os.replace(tmp_path, path)  # atomic
         finally:
+            # leave no debris if mutate()/json.dump raised mid-write (finding #2)
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
             fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
 

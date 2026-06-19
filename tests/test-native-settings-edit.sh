@@ -115,6 +115,7 @@ assert_rc 2 "statusLine unknown preset"  -- --path /statusLine --value sneaky
 assert_rc 2 "bool field string False"    -- --path '/enabledPlugins/superpowers@anthropic' --value False
 assert_rc 2 "bool field quoted false"    -- --path '/enabledPlugins/superpowers@anthropic' --value '"false"'
 assert_rc 2 "bool field numeric 0"       -- --path '/enabledPlugins/superpowers@anthropic' --value 0
+assert_rc 2 "bool field whitespace"      -- --path '/enabledPlugins/superpowers@anthropic' --value ' true '
 teardown
 
 # --- refusals: create-key (item 11) ---------------------------------------
@@ -131,6 +132,20 @@ out="$(CLAUDE_SETTINGS_HOME="$HOMEDIR" python3 "$PY" --path /model --value opus 
 [[ "$rc" == 2 ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: user scope without --confirm-global (rc=$rc)"; }
 out="$(CLAUDE_SETTINGS_HOME="$HOMEDIR" python3 "$PY" --path /model --value opus --scope user --confirm-global 2>&1)"; rc=$?
 [[ "$rc" == 0 ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: user scope with --confirm-global should write (rc=$rc)"; }
+teardown
+
+# finding #1: project scope whose --repo-root resolves to the user-global dir
+# must ALSO require --confirm-global (no blast-radius bypass).
+setup
+HOMEDIR="$WORK/home"; mkdir -p "$HOMEDIR/.claude"
+echo '{"model":"sonnet"}' > "$HOMEDIR/.claude/settings.json"
+out="$(CLAUDE_SETTINGS_HOME="$HOMEDIR" python3 "$PY" --path /model --value opus --scope project --repo-root "$HOMEDIR" 2>&1)"; rc=$?
+[[ "$rc" == 2 ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: project scope -> user-global must refuse w/o --confirm-global (rc=$rc)"; }
+mv="$(python3 -c 'import json;print(json.load(open("'"$HOMEDIR"'/.claude/settings.json"))["model"])')"
+[[ "$mv" == "sonnet" ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: user-global mutated via project-scope bypass (model=$mv)"; }
+# with --confirm-global it is allowed
+out="$(CLAUDE_SETTINGS_HOME="$HOMEDIR" python3 "$PY" --path /model --value opus --scope project --repo-root "$HOMEDIR" --confirm-global 2>&1)"; rc=$?
+[[ "$rc" == 0 ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: project->user-global with --confirm-global should write (rc=$rc)"; }
 teardown
 
 # --- refusals: cloud gate (H4) --------------------------------------------
