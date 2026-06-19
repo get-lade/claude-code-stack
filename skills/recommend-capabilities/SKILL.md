@@ -63,7 +63,11 @@ Execute these steps in order:
 
 ### Step 1 — Load registry
 
-Read `config/capability-registry.json` from the repo root. If absent, return `{"mode":"discovery","results":[],"note":"capability registry not found — run scripts/gen-capability-registry.sh"}`.
+Read the registry from the **installed global location first**, then fall back to the repo:
+1. `~/.claude/config/capability-registry.json` (installed — the normal case; the registry describes the globally-installed stack capabilities)
+2. `config/capability-registry.json` relative to repo root (dogfood/dev, before `scripts/update.sh` has run)
+
+If neither exists, return `{"mode":"discovery","results":[],"note":"capability registry not found — run scripts/gen-capability-registry.sh and scripts/update.sh"}`.
 
 ### Step 2 — Filter
 
@@ -87,11 +91,11 @@ Discard below a relevance floor: any capability with no semantic connection to t
 
 ### Step 5 — Staleness guard
 
-Before including a capability in results, verify its source file still exists:
-- For `kind: "skill"`: check that `skills/<id>/SKILL.md` exists (use `Read` or `Grep`).
-- For `kind: "subagent"`: check that `agents/<id>.md` exists.
+Before including a capability in results, verify its source file still exists. Check the installed global location first, then the repo (matching the registry-load order):
+- For `kind: "skill"`: `~/.claude/skills/<id>/SKILL.md` OR repo `skills/<id>/SKILL.md` (use `Read` or `Grep`).
+- For `kind: "subagent"`: `~/.claude/agents/<id>.md` OR repo `agents/<id>.md`.
 
-If the file is missing, silently drop the entry (it is stale — the registry was not regenerated after a deletion). Do not surface the missing file as an error to the user.
+If neither path exists, silently drop the entry (it is stale — the registry was not regenerated after a deletion). Do not surface the missing file as an error to the user.
 
 ### Step 6 — Cap and return
 
@@ -119,7 +123,7 @@ goal: <string | null>   # user's stated goal (e.g. "ship a security audit") — 
 
 ### Step 1 — Load registry (same as mode:discovery)
 
-Read `config/capability-registry.json`. Absent → return `{"mode":"settings","results":[],"note":"capability registry not found"}`.
+Read the registry (same location order as mode:discovery Step 1: `~/.claude/config/capability-registry.json`, then repo `config/capability-registry.json`). Absent → return `{"mode":"settings","results":[],"note":"capability registry not found"}`.
 
 ### Step 2 — Load current settings
 

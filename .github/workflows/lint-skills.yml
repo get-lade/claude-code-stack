@@ -27,3 +27,9 @@ jobs:
             fi
           done
           echo "All skills and agents pass frontmatter check."
+
+      - name: Check capability registry is fresh
+        run: |
+          # Fails if config/capability-registry.json is stale vs skills/agents
+          # frontmatter (compares content, ignoring the generated_at timestamp).
+          bash scripts/gen-capability-registry.sh --check
