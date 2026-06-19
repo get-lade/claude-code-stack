@@ -20,7 +20,7 @@ Set per-session preferences. Session-scoped by default; persistence is opt-in.
 ### 2. Ask (multiple-choice menu)
 
 Use the `AskUserQuestion` tool. One question per preference; put the current/last
-value first (marked "(current)"). Keep it to these five:
+value first (marked "(current)"). Keep it to these six:
 
 | Pref | Options |
 |---|---|
@@ -29,6 +29,7 @@ value first (marked "(current)"). Keep it to these five:
 | **Explanation verbosity** | minimal · normal · teaching |
 | **Orchestration mode** | main-thread · hybrid · agent-teams · dynamic-workflows |
 | **Cost-alert sensitivity** | relaxed · normal · strict |
+| **Passive capability suggestions** | on (default) · off — controls whether the dispatch nudge appends a pointer to the recommend-capabilities engine; the routing nudge itself always shows |
 
 Style → brevity budget (what the user is really choosing): terse ≈ 70 words /
 4 sentences, balanced ≈ 120 / 6, thorough ≈ 320 / 16. Mention this inline.
@@ -47,10 +48,14 @@ Shape (stamp `source:"session"` and an ISO `set_at`):
   "explanation_verbosity": "...",
   "orchestration_mode": "...",
   "cost_alert_sensitivity": "...",
+  "passive_suggest": true,
   "source": "session",
   "set_at": "<iso8601>"
 }
 ```
+Write `passive_suggest` as a JSON boolean from the menu choice: **on → `true`,
+off → `false`** (unquoted — the hook compares the literal `false`; a quoted
+`"off"`/`"on"` string would silently leave nudging enabled).
 `mkdir -p ~/.claude/session-state` first. This takes effect immediately:
 `brevity-drift.sh` reads `communication_style` on the next turn, and you (the
 assistant) honor effort/verbosity/orchestration directly for the session.

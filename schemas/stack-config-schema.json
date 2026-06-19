@@ -113,7 +113,8 @@
         "model_effort": { "type": "string", "enum": ["fast", "balanced", "max"], "default": "balanced", "description": "Opus 4.8 effort preference for the session." },
         "explanation_verbosity": { "type": "string", "enum": ["minimal", "normal", "teaching"], "default": "normal" },
         "orchestration_mode": { "type": "string", "enum": ["main-thread", "agent-teams", "hybrid", "dynamic-workflows"], "description": "Session orchestration override; falls back to top-level orchestration_mode if unset." },
-        "cost_alert_sensitivity": { "type": "string", "enum": ["relaxed", "normal", "strict"], "default": "normal" }
+        "cost_alert_sensitivity": { "type": "string", "enum": ["relaxed", "normal", "strict"], "default": "normal" },
+        "passive_suggest": { "type": "boolean", "default": true, "description": "When true, dispatch-nudge.sh appends a pointer to the recommend-capabilities engine. Set to false to silence the recommender pointer while keeping the /foreman//dispatch routing nudge." }
       },
       "additionalProperties": false
     },
