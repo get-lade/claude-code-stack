@@ -98,3 +98,9 @@ After confirming prefs, offer a one-time repo scan — but only when it's useful
   overrides all of them for the live session.
 - Per-session choices are ephemeral: a new session resets to the configured
   defaults unless you saved them in step 4.
+- **For everything beyond session prefs, use `/stack-config`** — the Setup
+  Dashboard. `/session` only covers the per-session communication/effort/verbosity
+  prefs; `/stack-config show-current` shows the whole setup (tier, modes, caps,
+  native model/output-style/plugins), scope-resolved, and safely changes the
+  common ones. Mention this once at the end of the `/session` flow so users
+  discover the dashboard. (Tier ≥2; absent below tier 2.)
