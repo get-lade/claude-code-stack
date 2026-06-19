@@ -3,16 +3,17 @@
 _Written: 2026-06-19 (ADR-017 implementation session)_
 
 ## Resume prompt
-> "Finish ADR-017 — do the install wiring (tier manifest + registry copy + CI freshness hook)."
+> "ADR-017 is fully implemented — push chore/tier-4-bump, open the PR, run scripts/update.sh."
 
-## Branch & state
-- Branch: `chore/tier-4-bump` — **6 commits ahead of `main`, not yet pushed** (sandbox cannot push `main` or open PRs).
+## Branch & state — ADR-017 COMPLETE
+- Branch: `chore/tier-4-bump` — **8 commits ahead of `main`, not yet pushed** (sandbox cannot push `main` or open PRs).
   1. `22ea21c` chore: bump dogfood project to Tier 4
   2. `fc03e36` docs(adr): accept ADR-017
   3. `d0aaf3b` feat: slice 1 — registry + engine + /suggest
   4. `53e313a` feat: slice B — passive_suggest folded into dispatch-nudge
-  5. `fee4f6b` docs(handoff)
-  6. `24c8cb8` feat: slice C — /config router + engine mode:settings
+  5. `24c8cb8` feat: slice C — /config router + engine mode:settings
+  6. `32beffa` feat: install wiring — manifest + registry copy + CI freshness
+  7–8. docs(handoff) updates
 - Working tree clean except untracked local artifacts under `.claude/sessions/` + `.claude/reviews/` (gitignored — keep local).
 - **First action next session:** push `chore/tier-4-bump` and open a PR to `main` (this is the human/desktop step; sandbox can't).
 
@@ -23,14 +24,11 @@ _Written: 2026-06-19 (ADR-017 implementation session)_
 - **Slice B**: `passive_suggest` folded into `hooks/dispatch-nudge.sh` (session-scoped dedupe, fail-open, cloud project-layer fallback, jq `//`-false-collapse avoided) + `hooks/session-prefs-init.sh`, both schemas, `templates/stack-defaults.template.json`, `/session` menu, new `tests/test-session-prefs-parity.sh`. All 9 test files pass.
 - **Slice C**: `skills/config/` router (4 ops, hardcoded goal recipes, allowlist/denylist, secret redaction, routes all mutations through owning skills) + engine `mode:settings` spec + `/default-settings`/`/default-edit` deprecation notices. Codex review closed the mutation-abuse bypasses (denylist self-enforced at the /config boundary; engine no longer routes via generic `default-edit`; recipe arg + redaction fixed). 58-cap registry, `--check` green, all tests pass.
 
-## Exact next steps (ONLY install wiring left)
-1. **Push branch + open PR** (human step). Verify CI.
-2. **Install wiring** — make slices ship on installs/cloud:
-   - Add the 3 new skills (`recommend-capabilities`, `suggest`, `config`) to `config/tier-manifests/tier-2.json` (tier_min 2).
-   - Add `config/capability-registry.json` to the manifest file-copy so it lands in installs.
-   - Add a CI / pre-commit **freshness hook** running `scripts/gen-capability-registry.sh --check` (fails the build if the committed registry is stale).
-   - Run `scripts/update.sh` on each machine to pick up the new global skills/hooks.
-3. Final: run full test suite + a cross-model reviewer pass on the wiring, then scribe + `/review-handoff`.
+## Exact next steps (implementation COMPLETE — these are human/verify steps)
+1. **Push `chore/tier-4-bump` + open a PR to `main`** (sandbox can't). Verify both CI jobs go green: `lint-skills` (now includes the registry freshness check) and `test-install` (tier 0–4 matrix incl. the new tier-2 manifest entries).
+2. **Run `scripts/update.sh`** on each machine to install the 3 new skills + registry into `~/.claude` (this dogfood session edited repo files only; the global skills aren't live until update.sh runs).
+3. Smoke-test live: invoke `/suggest` on a real task; toggle `passive_suggest` off via `/session` and confirm the nudge pointer disappears; run `/config` show-current and confirm the providers block is redacted.
+4. Optional: a cross-model reviewer pass on the wiring commit (manifest/CI/path change — low risk, already validated: manifest well-formed, all from-paths exist, registry `--check` green, 9/9 tests pass).
 
 ## Known out-of-scope (pre-existing, not ADR-017)
 - `/default-edit` remains a direct unrestricted config editor (its purpose). `/config` no longer routes to it; deprecation notice steers users to `/config`. Locking down direct `/default-edit` use is a separate hardening effort.
