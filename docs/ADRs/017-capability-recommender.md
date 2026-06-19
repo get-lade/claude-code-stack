@@ -1,6 +1,6 @@
 # ADR 017: Capability recommender — one shared engine, three feature shapes
 
-**Status:** Accepted
+**Status:** Accepted — **Feature C (`/config`) superseded by [ADR-018](018-settings-dashboard.md)** (renamed `/stack-config`; scope widened to the full Claude Code settings surface as a read-first "Setup Dashboard"). Features A (`/suggest`) and B (`passive_suggest`) are unchanged and shipped.
 **Date:** 2026-06-19
 **Author:** the maintainer + Claude (architect) — reviewed by product-critic (Codex), reviewer (Codex), red-team (Gemini)
 
