@@ -3,6 +3,8 @@ name: default-edit
 description: Interactive editor for stack configuration. Two scopes — 'global' edits ~/.claude/stack-defaults.json (affects all NEW projects, doesn't change existing); 'project' edits current project's stack-config.json. Confirms each change. For safety-relevant settings, prompts for reason and asks whether to also update global default.
 ---
 
+> **Note:** `/config` is now the single front door for changing settings — `change-one-setting` and `guided-setup-by-goal` supersede this skill with better discoverability and a goal-oriented flow. This skill remains functional and is still invoked by `/config`'s routing; prefer `/config` for interactive use.
+
 # /default-edit
 
 ## Usage

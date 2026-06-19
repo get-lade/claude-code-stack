@@ -105,6 +105,95 @@ Return up to `max_results` entries (highest confidence first). Populate `invocat
 - It does not perform the actions it recommends.
 - It does not re-parse skill/agent frontmatter at runtime (registry is the source of truth).
 
+## Ranking rubric (mode:settings)
+
+`mode:settings` is called by `/config recommended-changes`. The engine finds SETTING CHANGES relevant to the user's stated goal and current session context.
+
+### Input additions for mode:settings
+
+The caller MAY pass an optional field:
+
+```
+goal: <string | null>   # user's stated goal (e.g. "ship a security audit") — null if absent
+```
+
+### Step 1 — Load registry (same as mode:discovery)
+
+Read `config/capability-registry.json`. Absent → return `{"mode":"settings","results":[],"note":"capability registry not found"}`.
+
+### Step 2 — Load current settings
+
+Read `.claude/stack-config.json` (project config) and `~/.claude/session-state/current-prefs.json` (live session prefs). These are the current values the engine compares against proposed changes.
+
+### Step 3 — Filter to setting-skills
+
+Keep only registry entries whose `id` is in the setting-skills allowlist:
+`tier`, `sensitivity`, `strict-mode`, `domain-mode`, `cost-cap`, `session`
+
+These are the owning skills for specific mutable settings. EXCLUDED on purpose:
+`default-edit` (a generic non-interactive editor — `--setting=X --value=Y` — that
+would let a mis-scored result mutate ANY field incl. denylisted ones; the engine
+must only ever propose a *specific* setting via its *specific* owning skill),
+and `recommend-capabilities` / `config` (never recommend themselves).
+
+### Step 4 — Generate candidate changes
+
+For each setting-skill, generate a SINGLE best candidate change (the most relevant change for the current context). A candidate is:
+
+```json
+{
+  "setting": "<dot-path, e.g. sensitivity.level>",
+  "current_value": "<value from config/prefs>",
+  "proposed_value": "<new value>",
+  "reason": "<1 sentence — why this change helps the user's context/goal>",
+  "confidence": "high|medium|low",
+  "owning_skill": "<skill id, e.g. sensitivity>"
+}
+```
+
+Only generate a candidate if the proposed_value differs from current_value AND the change is semantically relevant to `last_user_ask`, `thread_context`, or `goal`.
+
+### Step 5 — Relevance ranking
+
+Score candidates against (`last_user_ask` + `thread_context` + `goal`):
+
+- **High** — the change directly addresses the user's stated goal or context (e.g., user is working with sensitive data → propose `sensitivity → confidential`).
+- **Medium** — the change is a useful companion given the context.
+- **Low** — the change is marginally useful; include only if filling to `max_results`.
+
+Discard below the relevance floor (no semantic connection). When all candidates are below the floor, return `results: []` with a `note`.
+
+### Step 6 — Cap and return
+
+Return up to `max_results` entries (highest confidence first).
+
+### Output schema (mode:settings)
+
+```json
+{
+  "mode": "settings",
+  "results": [
+    {
+      "setting": "sensitivity.level",
+      "current_value": "normal",
+      "proposed_value": "sensitive",
+      "reason": "The thread involves PII handling — sensitive mode adds logging for PII-touched files.",
+      "confidence": "high",
+      "owning_skill": "sensitivity"
+    }
+  ],
+  "note": "<optional>"
+}
+```
+
+### What mode:settings does NOT do
+
+- It does not write any files or call any skills.
+- It does not propose changes to denylisted settings: `required_approvals`, `cost_protection.per_session_hard_cap_usd`, `providers`, or any secret-bearing field. (The cost-ALERT thresholds `per_session_alert_usd` / `per_day_alert_usd` are allowlisted and MAY be proposed — only the hard CAP is denied.)
+- It only ever names a *specific* owning skill (`tier`, `sensitivity`, `strict-mode`, `domain-mode`, `cost-cap`, `session`) — never the generic `default-edit`.
+- It does not propose `config` or `recommend-capabilities` themselves.
+- It never generates a candidate where `proposed_value === current_value`.
+
 ## Notes
 
-- `mode:settings` is used by `/config recommended-changes` (later slice). At that point the engine reads `session_settings` and the registry's `kind: "skill"` entries that correspond to settings-changing skills (`/tier`, `/sensitivity`, `/domain-mode`, `/strict-mode`, `/session`, `/cost-cap`), then ranks which setting change is most relevant to the user's stated goals.
+- `mode:settings` is called by `/config recommended-changes`. The caller (/config) hands the ranked results to the user via `AskUserQuestion` and routes the chosen change to the owning skill — the engine only ranks and advises.
