@@ -1,6 +1,6 @@
 ---
 name: recommend-capabilities
-description: Core recommendation engine for stack capabilities. Reads config/capability-registry.json, filters by tier and session settings, and ranks capabilities by relevance to the current thread context. Internal only — never invoked directly by users. Called by /suggest (mode:discovery) and /config (mode:settings).
+description: Core recommendation engine for stack capabilities. Reads config/capability-registry.json, filters by tier and session settings, and ranks capabilities by relevance to the current thread context. Internal only — never invoked directly by users. Called by /suggest (mode:discovery) and /stack-config (mode:settings).
 user-invocable: false
 model-invocable: true
 recommendable: false
@@ -10,7 +10,7 @@ tools: Read, Grep
 
 # recommend-capabilities
 
-Internal ranking engine. Not user-facing. All three features (`/suggest`, dispatch-nudge, `/config`) delegate to this skill — none fork ranking logic.
+Internal ranking engine. Not user-facing. All three features (`/suggest`, dispatch-nudge, `/stack-config`) delegate to this skill — none fork ranking logic.
 
 ## Input contract
 
@@ -32,7 +32,7 @@ max_results:      <int, default 5>
 
 **`mode:discovery`** — find capabilities relevant to what the user is doing right now. Used by `/suggest` and `dispatch-nudge.sh`.
 
-**`mode:settings`** — find settings the user might want to change given their context. Used by `/config recommended-changes`. (Full detail for this mode is deferred to the `/config` slice.)
+**`mode:settings`** — find settings the user might want to change given their context. Used by `/stack-config recommended-changes`. (Full detail for this mode is deferred to the `/stack-config` slice.)
 
 ## Output schema
 
@@ -111,7 +111,7 @@ Return up to `max_results` entries (highest confidence first). Populate `invocat
 
 ## Ranking rubric (mode:settings)
 
-`mode:settings` is called by `/config recommended-changes`. The engine finds SETTING CHANGES relevant to the user's stated goal and current session context.
+`mode:settings` is called by `/stack-config recommended-changes`. The engine finds SETTING CHANGES relevant to the user's stated goal and current session context.
 
 ### Input additions for mode:settings
 
@@ -138,7 +138,7 @@ These are the owning skills for specific mutable settings. EXCLUDED on purpose:
 `default-edit` (a generic non-interactive editor — `--setting=X --value=Y` — that
 would let a mis-scored result mutate ANY field incl. denylisted ones; the engine
 must only ever propose a *specific* setting via its *specific* owning skill),
-and `recommend-capabilities` / `config` (never recommend themselves).
+and `recommend-capabilities` / `stack-config` (never recommend themselves).
 
 ### Step 4 — Generate candidate changes
 
@@ -195,9 +195,9 @@ Return up to `max_results` entries (highest confidence first).
 - It does not write any files or call any skills.
 - It does not propose changes to denylisted settings: `required_approvals`, `cost_protection.per_session_hard_cap_usd`, `providers`, or any secret-bearing field. (The cost-ALERT thresholds `per_session_alert_usd` / `per_day_alert_usd` are allowlisted and MAY be proposed — only the hard CAP is denied.)
 - It only ever names a *specific* owning skill (`tier`, `sensitivity`, `strict-mode`, `domain-mode`, `cost-cap`, `session`) — never the generic `default-edit`.
-- It does not propose `config` or `recommend-capabilities` themselves.
+- It does not propose `stack-config` or `recommend-capabilities` themselves.
 - It never generates a candidate where `proposed_value === current_value`.
 
 ## Notes
 
-- `mode:settings` is called by `/config recommended-changes`. The caller (/config) hands the ranked results to the user via `AskUserQuestion` and routes the chosen change to the owning skill — the engine only ranks and advises.
+- `mode:settings` is called by `/stack-config recommended-changes`. The caller (/stack-config) hands the ranked results to the user via `AskUserQuestion` and routes the chosen change to the owning skill — the engine only ranks and advises.

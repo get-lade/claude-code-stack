@@ -110,7 +110,7 @@ def truthy(val, default):
 
 # Meta capabilities never recommend themselves; overridable per-file via
 # `recommendable: false` frontmatter.
-NON_RECOMMENDABLE = {'recommend-capabilities', 'config'}
+NON_RECOMMENDABLE = {'recommend-capabilities', 'stack-config', 'config'}
 
 def capability_id(file_path, kind):
     if kind == 'skill':

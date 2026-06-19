@@ -3,7 +3,7 @@ name: default-settings
 description: Read-only view of stack configuration. Shows global defaults (~/.claude/stack-defaults.json), current project's stack-config.json, and where each setting comes from (global default, project override, env var). Flags divergence between global default and current project. Useful for "wait, what mode am I in?" moments.
 ---
 
-> **Note:** `/config show-current` is now the single front door for viewing settings — it supersedes this skill, adds session-pref display, and redacts secrets. This skill remains functional but `/config` is preferred.
+> **Note:** `/stack-config show-current` (the Setup Dashboard) is now the single front door for viewing settings — it supersedes this skill, adds native settings.json + session-pref display, and redacts secrets. This skill remains functional but `/stack-config` is preferred.
 
 # /default-settings
 
