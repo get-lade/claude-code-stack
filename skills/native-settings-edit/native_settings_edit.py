@@ -26,6 +26,7 @@ import fcntl
 import json
 import os
 import sys
+import tempfile
 import unicodedata
 
 # --- Audited constants (item 3, item 4) -------------------------------------
@@ -276,8 +277,12 @@ def load_settings(path):
 
 
 def _short(path):
-    home = os.path.expanduser("~")
-    return path.replace(home, "~") if path.startswith(home) else path
+    # Boundary-aware (finding #4): only abbreviate a real home prefix, and cover
+    # both the system home and a CLAUDE_SETTINGS_HOME override.
+    for home in {os.path.expanduser("~"), _claude_home()}:
+        if home and (path == home or path.startswith(home + os.sep)):
+            return path.replace(home, "~", 1)
+    return path
 
 
 # --- Key-existence guard (item 11) ------------------------------------------
@@ -319,32 +324,54 @@ def set_at_path(data, tokens, value):
 
 
 # --- Atomic locked write (item 7 / H2, L2, L3) ------------------------------
-def atomic_write(path, mutate):
-    """Read-modify-write under an advisory flock; write tmp then rename().
+def atomic_write(path, mutate, confirm_global):
+    """Read-modify-write under an advisory flock; write a temp file then rename().
 
     `mutate(data)` edits the dict in place and returns it. The lock serializes
-    concurrent writers; rename() makes the swap atomic for readers."""
+    concurrent writers; rename() makes the swap atomic for readers.
+
+    Hardened against a hostile project `.claude/` dir (security-auditor findings):
+    - lock opened with O_NOFOLLOW + no truncate, so a planted `settings.json.lock`
+      symlink can neither be followed nor used to truncate the user-global file.
+    - temp written via mkstemp (unpredictable name + O_EXCL), so a planted
+      `settings.json.tmp` symlink cannot redirect the write.
+    - the user-global guard is re-checked under the lock (closes the TOCTOU where
+      the dir is swapped to ~/.claude after resolve_target)."""
     target_dir = os.path.dirname(path)
     os.makedirs(target_dir, exist_ok=True)
     lock_path = path + ".lock"
-    tmp_path = path + ".tmp"
-    with open(lock_path, "w") as lock_fh:
-        fcntl.flock(lock_fh, fcntl.LOCK_EX)
+    try:
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    except OSError:
+        raise Refused("could not acquire the settings lock (suspicious lock file)")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        if _is_user_global(path) and not confirm_global:  # TOCTOU re-check (finding #3)
+            raise Refused(
+                "target now resolves to the user-global settings file "
+                "(~/.claude/settings.json) — re-run with --scope user --confirm-global"
+            )
+        data = load_settings(path)  # re-read under lock
+        data = mutate(data)
+        fd, tmp_path = tempfile.mkstemp(dir=target_dir, prefix=".settings-", suffix=".tmp")
         try:
-            data = load_settings(path)  # re-read under lock
-            data = mutate(data)
-            with open(tmp_path, "w", encoding="utf-8") as out:
+            with os.fdopen(fd, "w", encoding="utf-8") as out:
                 json.dump(data, out, indent=2, ensure_ascii=False)
                 out.write("\n")
-            os.replace(tmp_path, path)  # atomic
+            os.replace(tmp_path, path)  # atomic; replaces the dir entry, not a symlink target
+            tmp_path = None
         finally:
-            # leave no debris if mutate()/json.dump raised mid-write (finding #2)
-            if os.path.exists(tmp_path):
+            if tmp_path is not None and os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
                 except OSError:
                     pass
-            fcntl.flock(lock_fh, fcntl.LOCK_UN)
+    finally:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        os.close(lock_fd)
 
 
 # --- Orchestration ----------------------------------------------------------
@@ -383,7 +410,7 @@ def run(args):
             print("  (not written — value is not an installed style)")
         return 0
 
-    atomic_write(target, lambda d: (_apply(d, kind, key, tokens, write_value)))
+    atomic_write(target, lambda d: (_apply(d, kind, key, tokens, write_value)), args.confirm_global)
     print(f"[written] {args.path} ({args.scope}): {old_repr} -> {new_repr}")
     print(f"  file: {_short(target)}")
     return 0

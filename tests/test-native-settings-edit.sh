@@ -165,6 +165,26 @@ out="$(python3 "$PY" --path /model --value opus --repo-root "$WORK" 2>&1)"; rc=$
 [[ "$out" != *"{{{"* ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: error echoed raw file content"; }
 teardown
 
+# --- symlink attacks on tmp/lock (security-auditor findings #1, #2) --------
+# A hostile project .claude/ pre-plants settings.json.tmp / .lock as symlinks
+# to a victim file. The write must NOT follow them.
+setup
+SENT="$WORK/victim.json"; echo '{"victim":"intact"}' > "$SENT"
+ln -sf "$SENT" "$WORK/.claude/settings.json.tmp"
+out="$(python3 "$PY" --path /model --value opus --repo-root "$WORK" 2>&1)"; rc=$?
+# mkstemp ignores the planted .tmp -> legit write still lands on the real file
+[[ "$(json_get model)" == '"opus"' ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: write did not land with planted .tmp symlink (rc=$rc)"; }
+[[ "$(cat "$SENT")" == *intact* ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: .tmp symlink was followed -> victim overwritten"; }
+teardown
+
+setup
+SENT="$WORK/victim.json"; echo '{"victim":"intact"}' > "$SENT"
+ln -sf "$SENT" "$WORK/.claude/settings.json.lock"
+out="$(python3 "$PY" --path /model --value opus --repo-root "$WORK" 2>&1)"; rc=$?
+# O_NOFOLLOW refuses the planted .lock symlink; victim must be byte-intact
+[[ "$(cat "$SENT")" == *intact* ]] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: .lock symlink was followed -> victim truncated/overwritten"; }
+teardown
+
 # --- statusLine preset AUDIT invariant (item 4) ---------------------------
 # No audited preset command may reference a user-writable path.
 audit="$(python3 - "$PY" <<'PYEOF'
