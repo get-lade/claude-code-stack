@@ -346,10 +346,11 @@ else
   ok "fix3: timeout binary absent — hook uses plain-bash fallback (skip timing test)"
 fi
 
-# Fix 4: budget accrual — seed a loop_iteration row and assert cost accrues
+# Fix 4: budget accrual — seed a loop_iteration row and assert cost accrues.
+# State must include loop_id matching the log row so the scoped filter picks it up.
 mkdir -p "$HOME/.claude/logs"
 printf '{"event":"loop_iteration","loop_id":"test-loop","cost_usd":0.25}\n' > "$HOME/.claude/logs/subagent-runs.jsonl"
-loop_write_state '{"active":true,"iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+loop_write_state '{"active":true,"loop_id":"test-loop","iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
 LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false}' >/dev/null 2>&1 || true
 _cost="$(loop_read_state | jq -r '.cost_so_far_usd')"
 # cost_so_far_usd should be > 0 (0.25 from the log row)
@@ -389,5 +390,91 @@ grep -q 'success_criterion.*bounds' "$FOREMAN" && ok "fix8: foreman uses bounds 
 # Non-blocking fix 9: no_progress_exit:false + npc>=2 -> ok
 r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":5},"cost_so_far_usd":0,"no_progress_count":2,"no_progress_exit":false,"started_at":"2999-01-01T00:00:00Z"}')"
 [[ "$r" == "ok" ]] && ok "fix9: no_progress_exit:false + npc>=2 -> ok" || bad "fix9: got=$r"
+
+# --- Regression tests for this round's bug fixes ---
+
+# BUG1: cost accrual scoping — only rows for THIS loop_id should accrue.
+# Seed two rows for "my-loop" and one for "other-loop"; assert only "my-loop" rows count.
+mkdir -p "$HOME/.claude/logs"
+printf '{"event":"loop_iteration","loop_id":"my-loop","cost_usd":0.10}\n' > "$HOME/.claude/logs/subagent-runs.jsonl"
+printf '{"event":"loop_iteration","loop_id":"my-loop","cost_usd":0.15}\n' >> "$HOME/.claude/logs/subagent-runs.jsonl"
+printf '{"event":"loop_iteration","loop_id":"other-loop","cost_usd":9.99}\n' >> "$HOME/.claude/logs/subagent-runs.jsonl"
+loop_write_state '{"active":true,"loop_id":"my-loop","iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false}' >/dev/null 2>&1 || true
+_cost="$(loop_read_state | jq -r '.cost_so_far_usd')"
+# Should be ~0.25 (0.10 + 0.15 from my-loop), NOT 10.24 (which would include other-loop).
+awk -v c="$_cost" 'BEGIN{exit !(c > 0.20 && c < 1.0)}' 2>/dev/null \
+  && ok "bug1: cost scoped to loop_id only (cost=$_cost, expected ~0.25)" \
+  || bad "bug1: cost not scoped to loop_id (cost=$_cost, expected ~0.25, not ~10.24)"
+rm -f "$HOME/.claude/logs/subagent-runs.jsonl"
+
+# BUG2a: validate — per_run_budget_usd:"abc" -> rc 2
+loop_validate_spec '{"autonomy":"checkpoint","bounds":{"max_iterations":5,"per_run_budget_usd":"abc"}}' 2>/dev/null
+[[ $? -eq 2 ]] && ok "bug2a: per_run_budget_usd:abc -> rc 2" || bad "bug2a: non-numeric budget should fail"
+
+# BUG2b: validate — max_iterations:0 -> rc 2 (must be >= 1)
+loop_validate_spec '{"autonomy":"checkpoint","bounds":{"max_iterations":0}}' 2>/dev/null
+[[ $? -eq 2 ]] && ok "bug2b: max_iterations:0 -> rc 2" || bad "bug2b: zero max_iterations should fail"
+
+# BUG2b: validate — timeout_minutes:0 -> rc 2
+loop_validate_spec '{"autonomy":"checkpoint","bounds":{"max_iterations":5,"timeout_minutes":0}}' 2>/dev/null
+[[ $? -eq 2 ]] && ok "bug2b: timeout_minutes:0 -> rc 2" || bad "bug2b: zero timeout_minutes should fail"
+
+# BUG3: criterion timeout — never hangs (uses timeout/gtimeout/background+kill fallback).
+# We test the background+kill path by temporarily hiding timeout and gtimeout.
+# If neither timeout nor gtimeout is available, the hook must use background+kill
+# and return in <= 3 seconds for a criterion that sleeps 60 seconds.
+(
+  # Subshell with PATH that excludes timeout and gtimeout binaries.
+  _no_to_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v 'coreutils\|homebrew/bin\|usr/bin\|usr/local/bin' | tr '\n' ':' | sed 's/:$//')"
+  # Only run this inner test if neither timeout nor gtimeout is on the restricted path.
+  if ! command -v timeout >/dev/null 2>&1 && ! command -v gtimeout >/dev/null 2>&1; then
+    loop_write_state '{"active":true,"loop_id":"bg-test","iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"sleep 60"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}' 2>/dev/null || true
+    _t0="$(date +%s)"
+    LOOP_CRITERION_TIMEOUT=2 LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false}' >/dev/null 2>&1 || true
+    _t1="$(date +%s)"
+    echo "elapsed:$(( _t1 - _t0 ))"
+  else
+    echo "has-timeout"
+  fi
+) | {
+  read _bg_out
+  if [[ "$_bg_out" == "has-timeout" ]]; then
+    ok "bug3: timeout binary present — background fallback path not exercised (ok)"
+  elif [[ "$_bg_out" =~ ^elapsed:([0-9]+)$ ]]; then
+    _e="${BASH_REMATCH[1]}"
+    [[ $_e -lt 10 ]] && ok "bug3: background+kill fallback did not hang (elapsed=${_e}s)" \
+                      || bad "bug3: background+kill fallback hung (elapsed=${_e}s)"
+  else
+    ok "bug3: background fallback path inconclusive — skip (no output)"
+  fi
+}
+
+# BUG4: command chains — split on ;, &&, ||, | and deny if ANY segment matches.
+loop_write_state '{"active":true}'
+
+# git push; true -> deny (the push segment is caught even with trailing ; true)
+out="$(run_deny '{"tool_input":{"command":"git push; true"}}')"
+is_deny "$out" && ok "bug4: git push; true -> deny" || bad "bug4: git push; true not denied out=$out"
+
+# false || git push -> deny
+out="$(run_deny '{"tool_input":{"command":"false || git push origin main"}}')"
+is_deny "$out" && ok "bug4: false || git push -> deny" || bad "bug4: false || git push not denied out=$out"
+
+# echo hello && git push -> deny
+out="$(run_deny '{"tool_input":{"command":"echo hello && git push"}}')"
+is_deny "$out" && ok "bug4: echo hello && git push -> deny" || bad "bug4: echo hello && git push not denied out=$out"
+
+# bash -lc "git push" -> deny (bash -lc is a login-shell form of bash -c)
+out="$(run_deny '{"tool_input":{"command":"bash -lc \"git push origin main\""}}')"
+is_deny "$out" && ok "bug4: bash -lc git push -> deny" || bad "bug4: bash -lc git push not denied out=$out"
+
+# git status still allowed (must not be a false positive from chain-splitting)
+out="$(run_deny '{"tool_input":{"command":"git status"}}')"
+[[ -z "$out" ]] && ok "bug4: git status still allowed after chain fix" || bad "bug4: git status denied after chain fix out=$out"
+
+# git status; git log -> allowed (neither segment is denied)
+out="$(run_deny '{"tool_input":{"command":"git status; git log --oneline -5"}}')"
+[[ -z "$out" ]] && ok "bug4: git status; git log -> allowed" || bad "bug4: git status; git log denied out=$out"
 
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

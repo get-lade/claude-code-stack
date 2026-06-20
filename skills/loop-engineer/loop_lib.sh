@@ -63,10 +63,12 @@ loop_validate_spec() {
   _mi="$(echo "$json" | jq -r '.bounds.max_iterations // empty' 2>/dev/null)"
   _pb="$(echo "$json" | jq -r '.bounds.per_run_budget_usd // empty' 2>/dev/null)"
   _to="$(echo "$json" | jq -r '.bounds.timeout_minutes // empty' 2>/dev/null)"
-  # Each present bound must be an integer (no decimal point).
-  [[ -n "$_mi" && ! "$_mi" =~ ^[0-9]+$ ]] && return 2
-  [[ -n "$_pb" && ! "$_pb" =~ ^[0-9]+(\.[0-9]+)?$ ]] && { :; }  # budget allows decimal
-  [[ -n "$_to" && ! "$_to" =~ ^[0-9]+$ ]] && return 2
+  # Integer bounds must be a positive integer (>= 1); 0 is rejected (schema minimum:1).
+  [[ -n "$_mi" && ! "$_mi" =~ ^[1-9][0-9]*$ ]] && return 2
+  # per_run_budget_usd allows decimal but must be a valid non-negative number.
+  [[ -n "$_pb" && ! "$_pb" =~ ^[0-9]+(\.[0-9]+)?$ ]] && return 2
+  # timeout_minutes must also be a positive integer (>= 1).
+  [[ -n "$_to" && ! "$_to" =~ ^[1-9][0-9]*$ ]] && return 2
   echo "$json" | jq -e '.bounds.max_iterations or .bounds.per_run_budget_usd or .bounds.timeout_minutes' >/dev/null 2>&1 || return 2
   local auto ext cmd
   auto="$(echo "$json" | jq -r '.autonomy // "checkpoint"' 2>/dev/null)"

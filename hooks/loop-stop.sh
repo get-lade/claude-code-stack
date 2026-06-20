@@ -27,16 +27,35 @@ mark() { loop_write_state "$(echo "$STATE" | jq -c --arg s "$1" '.active=false |
 
 # 1) External termination: run the success criterion command.
 # Wrapped in a timeout (default 120 s) so a hanging criterion never stalls
-# the hook. If the `timeout` binary is absent (rare), fall back to plain bash.
+# the hook. Prefer `timeout` (GNU coreutils), then `gtimeout` (macOS Homebrew),
+# then a background+kill fallback so a missing binary never causes a hang.
 # Timeout or non-zero exit => criterion NOT met; 0 => met.
 CMD="$(echo "$STATE" | jq -r '.success_criterion.command // empty' 2>/dev/null)"
 if [[ -n "$CMD" ]]; then
   _TIMEOUT="${LOOP_CRITERION_TIMEOUT:-120}"
   if command -v timeout >/dev/null 2>&1; then
     timeout "$_TIMEOUT" bash -c "$CMD" >/dev/null 2>&1 && { mark "met"; exit 0; }
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$_TIMEOUT" bash -c "$CMD" >/dev/null 2>&1 && { mark "met"; exit 0; }
   else
-    # timeout not available; run plain (best-effort, may block)
-    bash -c "$CMD" >/dev/null 2>&1 && { mark "met"; exit 0; }
+    # Neither timeout nor gtimeout on PATH.
+    # Run the criterion in a background subshell and kill it after _TIMEOUT seconds
+    # if it has not exited on its own. This prevents a hanging criterion from
+    # stalling the Stop hook indefinitely.
+    bash -c "$CMD" >/dev/null 2>&1 &
+    _crit_pid=$!
+    _crit_elapsed=0
+    _crit_met=false
+    while kill -0 "$_crit_pid" 2>/dev/null; do
+      sleep 1
+      _crit_elapsed=$((_crit_elapsed + 1))
+      if [[ $_crit_elapsed -ge $_TIMEOUT ]]; then
+        kill "$_crit_pid" 2>/dev/null || true
+        break
+      fi
+    done
+    wait "$_crit_pid" 2>/dev/null && _crit_met=true || true
+    $_crit_met && { mark "met"; exit 0; }
   fi
 fi
 
@@ -49,23 +68,31 @@ NPC="$(echo "$STATE" | jq -r '.no_progress_count // 0' 2>/dev/null)"
 if [[ -n "$PREV" && "$PREV" == "$CUR" ]]; then NPC=$((NPC+1)); else NPC=0; fi
 
 # 2b) Accrue per-iteration cost from subagent-runs.jsonl.
-# Sum cost_usd of event=="loop_iteration" rows since started_at (if present),
-# falling back to LOOP_EST_COST_PER_ITER (default 0) when no data exists.
+# Sum cost_usd ONLY for rows where:
+#   event == "loop_iteration"
+#   AND loop_id == this loop's id (cross-loop contamination guard)
+#   AND ts >= started_at (if ts present; rows without ts are included)
+# Rows missing required fields contribute 0.
 # This is between-iteration and advisory (Phase 1); Phase 2 adds live monitoring.
+_LOOP_ID="$(echo "$STATE" | jq -r '.loop_id // empty' 2>/dev/null)"
 _STARTED="$(echo "$STATE" | jq -r '.started_at // empty' 2>/dev/null)"
 _LOG="${HOME:-/tmp}/.claude/logs/subagent-runs.jsonl"
 _ITER_COST=0
-if [[ -f "$_LOG" && -n "$_STARTED" ]]; then
-  # Sum cost_usd from rows with event==loop_iteration since the loop's started_at.
-  _ITER_COST="$(jq -rs --arg s "$_STARTED" \
-    '[.[] | select(.event=="loop_iteration") | .cost_usd // 0] | add // 0' \
+if [[ -f "$_LOG" && -n "$_LOOP_ID" ]]; then
+  # Filter by loop_id; if started_at is present, also filter by ts >= started_at.
+  # Rows that lack a ts field are included (conservative: they might belong here).
+  _ITER_COST="$(jq -rs --arg lid "$_LOOP_ID" --arg s "$_STARTED" \
+    '[.[] |
+      select(.event=="loop_iteration") |
+      select(.loop_id == $lid) |
+      select(if ($s != "" and .ts != null) then .ts >= $s else true end) |
+      .cost_usd // 0
+    ] | add // 0' \
     "$_LOG" 2>/dev/null)" || _ITER_COST=0
   [[ "$_ITER_COST" =~ ^[0-9]+(\.[0-9]+)?$ ]] || _ITER_COST=0
 elif [[ -f "$_LOG" ]]; then
-  # No started_at — sum all iteration rows as a best-effort estimate.
-  _ITER_COST="$(jq -rs '[.[] | select(.event=="loop_iteration") | .cost_usd // 0] | add // 0' \
-    "$_LOG" 2>/dev/null)" || _ITER_COST=0
-  [[ "$_ITER_COST" =~ ^[0-9]+(\.[0-9]+)?$ ]] || _ITER_COST=0
+  # No loop_id in state — contribute 0 to avoid cross-loop contamination.
+  _ITER_COST=0
 else
   _ITER_COST="${LOOP_EST_COST_PER_ITER:-0}"
 fi

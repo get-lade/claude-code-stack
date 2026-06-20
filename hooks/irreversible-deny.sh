@@ -2,6 +2,26 @@
 # PreToolUse[Bash] hook: during an ACTIVE loop, deny irreversible commands so
 # an unattended loop cannot push/merge/deploy/delete/move money. Outside a
 # loop, stays silent. Red-team owns the pattern list. Best-effort: exit 0.
+#
+# ---------------------------------------------------------------------------
+# Known limitations (Phase 1) — best-effort defense-in-depth, NOT a security
+# boundary. Pattern-matching cannot catch all evasions:
+#
+#   - sudo -u USER git push (user-switch before command)
+#   - env -i git push (env with cleared environment)
+#   - Deeply nested shells: bash -c 'bash -c "git push"' (3+ levels)
+#   - Heredoc injection: bash -c "$(cat <<'EOF' ... EOF)"
+#   - $() or eval inside the command string
+#   - base64/encoded commands: bash -c "$(echo Z2l0IHB1c2g= | base64 -d)"
+#   - Custom git wrappers or aliases (e.g. mygit push, gp)
+#   - Obfuscated env vars: x=push; git $x
+#
+# The real security boundary is: the autonomy ceiling (tier-scaled) + the
+# human checkpoint requirement (bounded-autonomous loops need external
+# termination) + Claude Code's own permission system. This hook is
+# defense-in-depth to make accidental irreversible actions unlikely during
+# normal loop operation, not to prevent a determined adversary.
+# ---------------------------------------------------------------------------
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,8 +91,9 @@ strip_prefixes() {
     lead="$(printf '%s' "$s" | awk '{print $1}')"
     case "$lead" in
       sh|bash|dash|zsh)
-        # Remove the "sh -c " prefix and strip surrounding quotes from the remainder.
-        s="$(printf '%s' "$s" | sed -E 's/^[[:space:]]*[a-z]+[[:space:]]+-c[[:space:]]+//')"
+        # Remove the "sh -c " / "bash -lc " prefix (handle combined flags like -lc, -cl).
+        # Pattern: shell-name SPACE -<optional-letters>c SPACE
+        s="$(printf '%s' "$s" | sed -E 's/^[[:space:]]*[a-z]+[[:space:]]+-[a-zA-Z]*c[[:space:]]+//')"
         # strip leading/trailing single or double quote (already removed by Step 1,
         # but guard in case they survived)
         s="${s#\'}" ; s="${s%\'}"
@@ -139,26 +160,52 @@ rm_is_recursive_force() {
   $has_r && $has_f
 }
 
+# Check a single normalized segment for denied patterns.
+# Returns 0 (true) if the segment should be denied.
+segment_is_denied() {
+  local seg="$1"
+  # Strip prefixes from the individual segment so wrappers inside chains are caught.
+  seg="$(strip_prefixes "$seg")"
+  local bin rest subcmd
+  bin="$(printf '%s' "$seg" | awk '{print $1}')"
+  # Use awk for rest to handle leading-space segments (cut -d' ' -f2- is field-index
+  # based and gives wrong result when the string starts with a space).
+  rest="$(printf '%s' "$seg" | awk '{$1=""; sub(/^ /,""); print}')"
+  if [[ "$bin" == "git" ]]; then
+    subcmd="$(git_subcommand "$rest")"
+    case "$subcmd" in
+      push|merge|"reset")
+        if [[ "$subcmd" == "reset" ]]; then
+          printf '%s' "$rest" | grep -qwF -- '--hard' && return 0
+        else
+          return 0
+        fi
+        ;;
+    esac
+  elif [[ "$bin" == "rm" ]]; then
+    rm_is_recursive_force "$rest" && return 0
+  elif printf '%s' "$seg" | grep -qiE \
+    'deploy-edge|supabase[[:space:]].*delete|supabase[[:space:]].*drop|drop[[:space:]]+table([[:space:]]|$)|truncate[[:space:]]|stripe[[:space:]]|gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
+    return 0
+  fi
+  return 1
+}
+
 DENIED=false
 
-if [[ "$BIN" == "git" ]]; then
-  SUBCMD="$(git_subcommand "$REST")"
-  case "$SUBCMD" in
-    push|merge|"reset")
-      # For reset, require --hard argument
-      if [[ "$SUBCMD" == "reset" ]]; then
-        printf '%s' "$REST" | grep -qwF -- '--hard' && DENIED=true
-      else
-        DENIED=true
-      fi
-      ;;
-  esac
-elif [[ "$BIN" == "rm" ]]; then
-  rm_is_recursive_force "$REST" && DENIED=true
-elif printf '%s' "$NORM" | grep -qiE \
-  'deploy-edge|supabase[[:space:]].*delete|supabase[[:space:]].*drop|drop[[:space:]]+table([[:space:]]|$)|truncate[[:space:]]|stripe[[:space:]]|gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
-  DENIED=true
-fi
+# Split the normalized command on chain operators (;, &&, ||, |) so that
+# `git push; true` and `false || git push` are both caught.
+# Use a while-read loop (portable; avoids bash-version issues with read -a).
+_split_on_chains() {
+  # Add trailing newline so the last segment is read by `while IFS= read -r`.
+  printf '%s\n' "$1" | tr ';|' '\n' | sed 's/&&/\n/g'
+}
+
+while IFS= read -r _seg; do
+  # Skip blank/whitespace-only segments produced by the split.
+  [[ -z "${_seg// /}" ]] && continue
+  segment_is_denied "$_seg" && { DENIED=true; break; }
+done < <(_split_on_chains "$NORM")
 
 if $DENIED; then
   jq -nc '{hookSpecificOutput:{hookEventName:"PreToolUse", permissionDecision:"deny",
