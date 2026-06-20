@@ -58,4 +58,31 @@ cur="$(loop_read_state)"
   echo "set-e-ok"
 ) | grep -q "set-e-ok" && ok "set -e caller not terminated on mkdir failure" || bad "set -e caller terminated"
 
+# --- Task 2: state hash + spec validation + bound checks ---
+
+# state hash is stable for unchanged tree, differs after a change
+cd "$(mktemp -d)"; git init -q; echo a > f; git add f; git commit -qm init
+h1="$(loop_state_hash "$PWD")"; echo b >> f; h2="$(loop_state_hash "$PWD")"
+[[ -n "$h1" && "$h1" != "$h2" ]] && ok "state_hash changes on edit" || bad "state_hash h1=$h1 h2=$h2"
+
+# validate: missing success_criterion for bounded-autonomous -> rc 2
+loop_validate_spec '{"autonomy":"bounded-autonomous","require_external_termination":true,"bounds":{"max_iterations":5}}'
+[[ $? -eq 2 ]] && ok "validate refuses missing criterion" || bad "validate should refuse"
+
+# validate: complete spec -> rc 0
+loop_validate_spec '{"autonomy":"checkpoint","success_criterion":{"type":"shell","command":"true"},"bounds":{"max_iterations":5}}'
+[[ $? -eq 0 ]] && ok "validate accepts complete spec" || bad "validate should accept"
+
+# check_bounds: iteration over cap -> max_iterations
+r="$(loop_check_bounds '{"iteration":5,"bounds":{"max_iterations":5},"cost_so_far_usd":0,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "max_iterations" ]] && ok "bounds trip on iterations" || bad "bounds got=$r"
+
+# check_bounds: budget over cap -> budget_exceeded
+r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":5,"per_run_budget_usd":1},"cost_so_far_usd":2,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "budget_exceeded" ]] && ok "bounds trip on budget" || bad "bounds got=$r"
+
+# check_bounds: all within -> ok
+r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":5,"per_run_budget_usd":5},"cost_so_far_usd":1,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "ok" ]] && ok "bounds ok within caps" || bad "bounds got=$r"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
