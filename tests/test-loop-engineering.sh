@@ -267,4 +267,18 @@ out="$(run_deny '{"tool_input":{"command":"echo \"gh pr merge\""}}')"
 # for non-git patterns; the test just confirms behavior is consistent (deny = acceptable here)
 ok "deny: gh pr merge echo behavior consistent (deny is safe)"
 
+# --- Task 5: loop_policy schema + template ---
+
+SCHEMA="$REPO_ROOT/schemas/stack-config-schema.json"
+# loop_policy is a defined property (schema is additionalProperties:false)
+jq -e '.properties.loop_policy.properties.max_iterations' "$SCHEMA" >/dev/null 2>&1 \
+  && ok "schema: loop_policy defined" || bad "schema: loop_policy missing"
+# template ships a default loop_policy
+TMPL="$REPO_ROOT/templates/stack-config.template.json"
+jq -e '.loop_policy.default_autonomy' "$TMPL" >/dev/null 2>&1 \
+  && ok "template: loop_policy default present" || bad "template: loop_policy missing"
+# default autonomy is the safe floor
+[[ "$(jq -r '.loop_policy.default_autonomy' "$TMPL")" == "checkpoint" ]] \
+  && ok "template: default_autonomy=checkpoint" || bad "template autonomy not checkpoint"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
