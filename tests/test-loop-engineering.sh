@@ -288,4 +288,10 @@ SKILL="$REPO_ROOT/skills/loop-engineer/SKILL.md"
 grep -q 'loop_validate_spec' "$SKILL" && ok "skill: references validate" || bad "skill: no validate ref"
 grep -q 'require_external_termination' "$SKILL" && ok "skill: documents termination" || bad "skill: no termination doc"
 
+# --- Task 7: foreman loop-shape detection ---
+
+FOREMAN="$REPO_ROOT/skills/foreman/SKILL.md"
+grep -q 'Detect loop-shape' "$FOREMAN" && ok "foreman: loop-shape step present" || bad "foreman: no loop-shape step"
+grep -q 'pattern selected' "$FOREMAN" && ok "foreman: visible pattern log" || bad "foreman: no visible log"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
