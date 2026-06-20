@@ -133,4 +133,37 @@ _inject_marker="$_tmp_home/awk_injected"
 r="$(loop_check_bounds "{\"iteration\":1,\"bounds\":{\"max_iterations\":5,\"per_run_budget_usd\":\"1; system(\\\"touch ${_inject_marker}\\\");\"},\"cost_so_far_usd\":\"0\",\"no_progress_count\":0}" 2>/dev/null)"
 [[ ! -f "$_inject_marker" ]] && ok "awk injection blocked" || bad "awk injection executed"
 
+# --- Task 3: loop-stop.sh Stop hook ---
+
+STOP="$REPO_ROOT/hooks/loop-stop.sh"
+run_stop() { echo "$2" | LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP"; }
+
+mkdir -p "$HOME/.claude/session-state"
+
+# no active loop -> allow stop (empty output)
+loop_write_state '{"active":false}'
+out="$(run_stop '' '{"stop_hook_active":false}')"
+[[ -z "$out" ]] && ok "stop: inactive -> allow" || bad "stop inactive out=$out"
+
+# stop_hook_active true -> always allow (no infinite block)
+loop_write_state '{"active":true,"iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+out="$(run_stop '' '{"stop_hook_active":true}')"
+[[ -z "$out" ]] && ok "stop: stop_hook_active -> allow" || bad "stop active-flag out=$out"
+
+# criterion passes -> mark met, allow stop
+loop_write_state '{"active":true,"iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"true"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+out="$(run_stop '' '{"stop_hook_active":false}')"
+[[ -z "$out" ]] && ok "stop: criterion met -> allow" || bad "stop met out=$out"
+[[ "$(loop_read_state | jq -r '.status')" == "met" ]] && ok "stop: status=met" || bad "stop status not met"
+
+# criterion fails, bounds remain -> block (keep working)
+loop_write_state '{"active":true,"iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+out="$(run_stop '' '{"stop_hook_active":false}')"
+echo "$out" | jq -e '.decision=="block"' >/dev/null 2>&1 && ok "stop: unmet -> block" || bad "stop unmet out=$out"
+
+# malformed state -> allow stop (fail-closed)
+printf '%s' 'not json' > "$HOME/.claude/session-state/loop-state.json"
+out="$(run_stop '' '{"stop_hook_active":false}')"
+[[ -z "$out" ]] && ok "stop: malformed -> allow (fail-closed)" || bad "stop malformed out=$out"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
