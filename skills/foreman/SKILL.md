@@ -31,6 +31,25 @@ You orchestrate the team. You don't write code, design, test, or review yourself
    - `triage` — figure out what to do
    - `documentation` — handoff, spec, ADR set, design doc (v1.1: explicit type)
 
+3b. **Detect loop-shape (ADR-019).** If the task is iterate-until-verified
+    (run-until-tests-pass, babysit-PRs, eval-until-threshold, long unattended
+    refactor/migration), route it to a loop pattern and hand to `/loop-engineer`
+    instead of a one-shot dispatch:
+
+    | Task shape | Pattern |
+    |---|---|
+    | long refactor / migration | ralph |
+    | skill / prompt / eval improvement | eval-driven |
+    | review / audit gate | generator-critic |
+    | recurring / scheduled | scheduled |
+    | ad-hoc "until X" | /goal |
+    | (default / unclear) | react |
+
+    Tiebreak: most-specific shape wins; ties → `react`. **Always print
+    `pattern selected: <pattern> (<why>)`** so a misroute is visible. Emit the
+    `success_criterion` + `bounds` into the loop spec for `/loop-engineer`. If the
+    task is a normal one-shot, skip this step.
+
 4. **Match the team.** For each task type, the default team is:
 
    | Task type | Default team |

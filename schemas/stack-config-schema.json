@@ -118,6 +118,24 @@
       },
       "additionalProperties": false
     },
+    "loop_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Governance for autonomous loops (ADR-019). Defaults ship safe; tier raises the ceiling.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "default_autonomy": { "type": "string", "enum": ["checkpoint", "bounded-checkpoint", "bounded-autonomous"], "default": "checkpoint" },
+        "autonomy_ceiling": { "type": "string", "enum": ["checkpoint", "bounded-checkpoint", "bounded-autonomous"], "default": "checkpoint" },
+        "max_iterations": { "type": "integer", "minimum": 1, "default": 25 },
+        "max_recursion_depth": { "type": "integer", "minimum": 1, "default": 5, "description": "ADVISORY in Phase 1: the runtime does not enforce fan-out/recursion depth; max_iterations is the hard cap. Phase 2 will enforce this." },
+        "per_run_budget_usd": { "type": ["number", "null"], "default": 5, "description": "Between-iteration advisory cap in Phase 1: cost is accrued from subagent-runs.jsonl at each Stop-hook invocation and compared before the next iteration. Does NOT stop a within-iteration runaway (Phase 2 live monitor closes that gap)." },
+        "timeout_minutes": { "type": ["integer", "null"], "default": 180 },
+        "no_progress_exit": { "type": "boolean", "default": true },
+        "require_external_termination": { "type": "string", "enum": ["auto", "always", "never"], "default": "auto" },
+        "commit_per_iteration": { "type": "boolean", "default": false },
+        "irreversible_actions_break_loop": { "type": "boolean", "default": true }
+      }
+    },
     "workflow_roster": {
       "type": "string",
       "enum": ["warn", "block", "off"],
