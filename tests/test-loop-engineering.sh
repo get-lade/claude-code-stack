@@ -14,6 +14,10 @@ bad()  { FAIL=$((FAIL+1)); echo "FAIL: $1"; }
 _tmp_home="$(mktemp -d)" || { echo "FAIL: mktemp failed"; exit 1; }
 trap 'rm -rf "$_tmp_home"' EXIT
 export HOME="$_tmp_home"
+# ADR-020: state is keyed by session id. Neutralize a leaked session id from the
+# parent (real) Claude session so the legacy-path tests below are deterministic;
+# the per-session behavior is exercised explicitly in the isolation block.
+unset CLAUDE_CODE_SESSION_ID LOOP_STATE_FILE 2>/dev/null || true
 # shellcheck disable=SC1090
 source "$LIB"
 
@@ -476,5 +480,33 @@ out="$(run_deny '{"tool_input":{"command":"git status"}}')"
 # git status; git log -> allowed (neither segment is denied)
 out="$(run_deny '{"tool_input":{"command":"git status; git log --oneline -5"}}')"
 [[ -z "$out" ]] && ok "bug4: git status; git log -> allowed" || bad "bug4: git status; git log denied out=$out"
+
+# --- ADR-020: per-session loop-state isolation ---
+
+# Two distinct session ids resolve to distinct files; writes do not collide.
+( export CLAUDE_CODE_SESSION_ID="sessA"; loop_write_state '{"active":true,"iteration":1,"loop_id":"A"}' )
+( export CLAUDE_CODE_SESSION_ID="sessB"; loop_write_state '{"active":true,"iteration":7,"loop_id":"B"}' )
+_ia="$( export CLAUDE_CODE_SESSION_ID="sessA"; loop_read_state | jq -r '.iteration' )"
+_ib="$( export CLAUDE_CODE_SESSION_ID="sessB"; loop_read_state | jq -r '.iteration' )"
+[[ "$_ia" == "1" && "$_ib" == "7" ]] && ok "adr020: sessions isolated (A=$_ia B=$_ib)" || bad "adr020: sessions collided (A=$_ia B=$_ib)"
+[[ -f "$HOME/.claude/session-state/loop-state.sessA.json" && -f "$HOME/.claude/session-state/loop-state.sessB.json" ]] \
+  && ok "adr020: per-session files exist" || bad "adr020: per-session files missing"
+
+# Legacy fallback: no session id -> single loop-state.json (back-compat).
+( unset CLAUDE_CODE_SESSION_ID; loop_write_state '{"active":true,"iteration":3,"loop_id":"legacy"}' )
+[[ -f "$HOME/.claude/session-state/loop-state.json" ]] && ok "adr020: legacy fallback file when no sid" || bad "adr020: legacy fallback missing"
+
+# A session id carrying path-traversal chars is sanitized; it cannot escape the dir.
+( export CLAUDE_CODE_SESSION_ID="../../evil"; loop_write_state '{"active":true}' )
+[[ ! -e "$HOME/evil" && ! -e "$REPO_ROOT/evil" ]] && ok "adr020: sid path-traversal sanitized" || bad "adr020: sid traversal escaped"
+
+# Stop hook routes by payload session_id: a foreign session's loop must not block
+# this stop; the owning session's loop must.
+( export CLAUDE_CODE_SESSION_ID="sessC"; loop_write_state '{"active":true,"iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}' )
+out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false,"session_id":"sessD"}')"
+[[ -z "$out" ]] && ok "adr020: foreign session's loop does not block this stop" || bad "adr020: stop blocked by foreign loop out=$out"
+out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false,"session_id":"sessC"}')"
+echo "$out" | jq -e '.decision=="block"' >/dev/null 2>&1 && ok "adr020: stop blocks the owning session" || bad "adr020: owning session not blocked out=$out"
+rm -f "$HOME/.claude/session-state/loop-state.sess"*.json
 
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
