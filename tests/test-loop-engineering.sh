@@ -281,4 +281,11 @@ jq -e '.loop_policy.default_autonomy' "$TMPL" >/dev/null 2>&1 \
 [[ "$(jq -r '.loop_policy.default_autonomy' "$TMPL")" == "checkpoint" ]] \
   && ok "template: default_autonomy=checkpoint" || bad "template autonomy not checkpoint"
 
+# --- Task 6: /loop-engineer skill (front door + pre-flight gate) ---
+
+SKILL="$REPO_ROOT/skills/loop-engineer/SKILL.md"
+[[ -f "$SKILL" ]] && ok "skill: SKILL.md present" || bad "skill: SKILL.md missing"
+grep -q 'loop_validate_spec' "$SKILL" && ok "skill: references validate" || bad "skill: no validate ref"
+grep -q 'require_external_termination' "$SKILL" && ok "skill: documents termination" || bad "skill: no termination doc"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
