@@ -3,11 +3,14 @@
   "stack_tier": 4,
   "purpose": "The Claude Code Stack source repo — dogfooding the tiered multi-agent config on itself.",
   "created": "2026-06-18",
-  "last_modified": "2026-06-19",
+  "last_modified": "2026-06-20",
   "orchestration_mode": "main-thread",
   "strict_mode": false,
   "domain_mode": null,
-  "sensitivity": { "level": "normal", "notes": "Public repo; no secrets tracked." },
+  "sensitivity": {
+    "level": "normal",
+    "notes": "Public repo; no secrets tracked."
+  },
   "active_subagents": [
     "architect",
     "implementer",
@@ -60,6 +63,29 @@
       "scope": "project",
       "also_updated_global": true,
       "invoked_via": "/tier"
+    },
+    {
+      "date": "2026-06-20T23:01:17Z",
+      "setting": "loop_policy",
+      "old_value": null,
+      "new_value": "default block (backfill)",
+      "reason": "backfill: loop governor made core scaffolding (Tier 2+)",
+      "scope": "project",
+      "also_updated_global": false,
+      "invoked_via": "script:backfill-loop-policy.sh"
     }
-  ]
+  ],
+  "loop_policy": {
+    "enabled": true,
+    "default_autonomy": "checkpoint",
+    "autonomy_ceiling": "checkpoint",
+    "max_iterations": 25,
+    "max_recursion_depth": 5,
+    "per_run_budget_usd": 5,
+    "timeout_minutes": 180,
+    "no_progress_exit": true,
+    "require_external_termination": "auto",
+    "commit_per_iteration": false,
+    "irreversible_actions_break_loop": true
+  }
 }

@@ -88,6 +88,9 @@ elif [[ -f "$STACK_CONFIG" ]]; then
   echo "✅ Stack active — $MODE · Tier $TIER · $DOMAIN · $STRICT · sensitivity:$SENSITIVITY"
   echo "   Change settings: /tier · /domain-mode · /strict-mode · /sensitivity · /cost-cap"
   echo "   Re-run init: /project-init (asks before overwriting)"
+  if [[ "$TIER" =~ ^[0-9]+$ && "$TIER" -ge 2 ]]; then
+    echo "   Run a governed loop: /loop-engineer (bounded, Stop-hook enforced)"
+  fi
   if [[ -n "$WRAPPED_FROM" ]]; then
     echo "   (detected nested repo at $WRAPPED_FROM — cd in for git commands)"
   fi

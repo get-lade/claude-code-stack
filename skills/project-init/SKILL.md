@@ -153,6 +153,33 @@ Then ask: "Should this also become your default for new projects?"
 }
 ```
 
+**Tier ≥ 2 only — append a `loop_policy` block.** The base JSON above is
+tier-agnostic. For Tier 0/1, write it as-is (no `loop_policy`). For **Tier ≥ 2**
+(the tier that installs the loop Stop-hook + `/loop-engineer`), insert this block
+between `cost_protection` and `change_history`, copied verbatim from
+`templates/stack-config.template.json`:
+
+```json
+  "loop_policy": {
+    "enabled": true,
+    "default_autonomy": "checkpoint",
+    "autonomy_ceiling": "checkpoint",
+    "max_iterations": 25,
+    "max_recursion_depth": 5,
+    "per_run_budget_usd": 5,
+    "timeout_minutes": 180,
+    "no_progress_exit": true,
+    "require_external_termination": "auto",
+    "commit_per_iteration": false,
+    "irreversible_actions_break_loop": true
+  },
+```
+
+This block is the safe floor and the **ceiling** `/loop-engineer` clamps every
+loop to (see ADR-019); raising `autonomy_ceiling` is a safety-relevant change →
+log a `change_history` entry. If run at Tier 0/1, `/loop-engineer` falls back to
+schema defaults.
+
 **`change_history` entry shape (v1.1):** Each entry is an object appended when settings are changed (especially safety-relevant ones). Shape:
 
 ```json
