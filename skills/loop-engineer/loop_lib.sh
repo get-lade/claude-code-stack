@@ -101,10 +101,16 @@ loop_check_bounds() {
 # Add an estimated USD delta to cost_so_far in loop-state (between-iteration).
 # Also append a row to subagent-runs.jsonl so caps calibrate from real history.
 loop_accrue_cost() {
-  local delta="${1:-0}" state
+  local delta="${1:-0}" state new_state
+  # Reject negative deltas: they could drive cost_so_far_usd negative, permanently
+  # bypassing the per_run_budget_usd cap.
+  if ! awk -v d="$delta" 'BEGIN{exit !(d >= 0)}' 2>/dev/null; then
+    return 1
+  fi
   state="$(loop_read_state)"
-  state="$(echo "$state" | jq -c --argjson d "$delta" '.cost_so_far_usd=((.cost_so_far_usd//0)+$d)')"
-  loop_write_state "$state" 2>/dev/null || return 1
+  new_state="$(echo "$state" | jq -c --argjson d "$delta" '.cost_so_far_usd=((.cost_so_far_usd//0)+$d)' 2>/dev/null)" || return 0
+  loop_write_state "$new_state" 2>/dev/null || return 1
+  state="$new_state"
   local log="${_loop_home}/.claude/logs/subagent-runs.jsonl"
   mkdir -p "$(dirname "$log")" 2>/dev/null || return 0
   jq -nc --argjson d "$delta" --arg lid "$(echo "$state" | jq -r '.loop_id // "loop"')" \
