@@ -166,4 +166,23 @@ printf '%s' 'not json' > "$HOME/.claude/session-state/loop-state.json"
 out="$(run_stop '' '{"stop_hook_active":false}')"
 [[ -z "$out" ]] && ok "stop: malformed -> allow (fail-closed)" || bad "stop malformed out=$out"
 
+# --- Task 4: irreversible-deny.sh ---
+
+DENY="$REPO_ROOT/hooks/irreversible-deny.sh"
+run_deny() { echo "$1" | LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$DENY"; }
+
+# active loop + push -> deny
+loop_write_state '{"active":true}'
+out="$(run_deny '{"tool_input":{"command":"git push origin main"}}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "deny: push during loop" || bad "deny push out=$out"
+
+# active loop + read-only -> no deny (empty)
+out="$(run_deny '{"tool_input":{"command":"git status"}}')"
+[[ -z "$out" ]] && ok "deny: status allowed" || bad "deny status out=$out"
+
+# no active loop + push -> no deny (don't interfere with normal work)
+loop_write_state '{"active":false}'
+out="$(run_deny '{"tool_input":{"command":"git push origin main"}}')"
+[[ -z "$out" ]] && ok "deny: push allowed outside loop" || bad "deny push-noloop out=$out"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
