@@ -97,3 +97,16 @@ loop_check_bounds() {
   fi
   echo "ok"
 }
+
+# Add an estimated USD delta to cost_so_far in loop-state (between-iteration).
+# Also append a row to subagent-runs.jsonl so caps calibrate from real history.
+loop_accrue_cost() {
+  local delta="${1:-0}" state
+  state="$(loop_read_state)"
+  state="$(echo "$state" | jq -c --argjson d "$delta" '.cost_so_far_usd=((.cost_so_far_usd//0)+$d)')"
+  loop_write_state "$state" 2>/dev/null || return 1
+  local log="${_loop_home}/.claude/logs/subagent-runs.jsonl"
+  mkdir -p "$(dirname "$log")" 2>/dev/null || return 0
+  jq -nc --argjson d "$delta" --arg lid "$(echo "$state" | jq -r '.loop_id // "loop"')" \
+    '{event:"loop_iteration", loop_id:$lid, cost_usd:$d}' >>"$log" 2>/dev/null || true
+}

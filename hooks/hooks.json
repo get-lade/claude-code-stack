@@ -1,5 +1,8 @@
 {
   "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loop-stop.sh" } ] }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -22,7 +25,8 @@
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bulk-job-reminder.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bulk-job-reminder.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/irreversible-deny.sh" }
         ]
       },
       {

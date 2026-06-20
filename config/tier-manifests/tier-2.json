@@ -39,7 +39,11 @@
       { "from": "hooks/subagent-complete-log.sh", "to": "~/.claude/hooks/subagent-complete-log.sh", "executable": true },
       { "from": "hooks/dispatch-nudge.sh", "to": "~/.claude/hooks/dispatch-nudge.sh", "executable": true },
       { "from": "hooks/workflow-roster-check.sh", "to": "~/.claude/hooks/workflow-roster-check.sh", "executable": true },
-      { "from": "config/settings.team.template.json", "to": "~/.claude/settings.json", "merge": true }
+      { "from": "config/settings.team.template.json", "to": "~/.claude/settings.json", "merge": true },
+      { "from": "skills/loop-engineer/SKILL.md", "to": "~/.claude/skills/loop-engineer/SKILL.md" },
+      { "from": "skills/loop-engineer/loop_lib.sh", "to": "~/.claude/skills/loop-engineer/loop_lib.sh", "executable": true },
+      { "from": "hooks/loop-stop.sh", "to": "~/.claude/hooks/loop-stop.sh", "executable": true },
+      { "from": "hooks/irreversible-deny.sh", "to": "~/.claude/hooks/irreversible-deny.sh", "executable": true }
     ],
     "schemas": [
       { "from": "schemas/001-cost-log.sql", "apply_to_supabase": true }
@@ -89,7 +93,8 @@
     "jq -e '[.hooks.PreToolUse[]? | select(.matcher==\"Agent\")] | length >= 1' ~/.claude/settings.json",
     "jq -e '[.hooks.PreToolUse[]? | select(.matcher==\"Workflow\")] | length >= 1' ~/.claude/settings.json",
     "jq -e '[.hooks.PostToolUse[]? | select(.matcher==\"Agent\")] | length >= 1' ~/.claude/settings.json",
-    "jq -e '[.hooks.UserPromptSubmit[]?.hooks[]? | select(.command | test(\"dispatch-nudge\"))] | length >= 1' ~/.claude/settings.json"
+    "jq -e '[.hooks.UserPromptSubmit[]?.hooks[]? | select(.command | test(\"dispatch-nudge\"))] | length >= 1' ~/.claude/settings.json",
+    "test -f ~/.claude/skills/loop-engineer/SKILL.md && test -x ~/.claude/hooks/loop-stop.sh"
   ],
   "manifest_format_note": "Tier-2 manifest uses the same files.global / from-to / smoke_tests format as tier 0, 1, 3, 4, 5 and the install.sh / verify.sh scripts. Artifact 3's draft used a divergent installs.* / src-dest / verify structure that the installer does not read — corrected here for consistency. See Tier 2 install log.",
   "codex_note": "Artifact 3's tier-2 manifest required Keychain item `openai-api-key`. Per the maintainer's decision (2026-05-16, ADR-011), OpenAI-family work routes through the local Codex CLI instead — the requirement is now `command: codex`."

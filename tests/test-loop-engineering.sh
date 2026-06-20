@@ -294,4 +294,18 @@ FOREMAN="$REPO_ROOT/skills/foreman/SKILL.md"
 grep -q 'Detect loop-shape' "$FOREMAN" && ok "foreman: loop-shape step present" || bad "foreman: no loop-shape step"
 grep -q 'pattern selected' "$FOREMAN" && ok "foreman: visible pattern log" || bad "foreman: no visible log"
 
+# --- Task 8: register hooks, tier manifest, cost accrual ---
+
+HOOKS="$REPO_ROOT/hooks/hooks.json"
+jq -e '.hooks.Stop[]?.hooks[]?.command | select(test("loop-stop.sh"))' "$HOOKS" >/dev/null 2>&1 \
+  && ok "hooks.json: loop-stop registered" || bad "hooks.json: loop-stop missing"
+jq -e '.hooks.PreToolUse[]? | select(.matcher=="Bash") | .hooks[]?.command | select(test("irreversible-deny.sh"))' "$HOOKS" >/dev/null 2>&1 \
+  && ok "hooks.json: irreversible-deny registered" || bad "hooks.json: deny missing"
+MAN="$REPO_ROOT/config/tier-manifests/tier-2.json"
+jq -e '.files.global[]? | select(.to | test("loop-engineer/SKILL.md"))' "$MAN" >/dev/null 2>&1 \
+  && ok "manifest: skill copied" || bad "manifest: skill missing"
+# cost accrual fn
+[[ "$(loop_write_state '{"cost_so_far_usd":1}'; loop_accrue_cost 0.5; loop_read_state | jq -r '.cost_so_far_usd')" == "1.5" ]] \
+  && ok "lib: cost accrual" || bad "lib: cost accrual"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
