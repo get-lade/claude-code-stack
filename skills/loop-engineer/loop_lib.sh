@@ -31,26 +31,38 @@ loop_write_state() {
   mv "$tmp" "$LOOP_STATE_FILE" 2>/dev/null || { rm -f "$tmp"; return 0; }
 }
 
-# Hash of the working state: git HEAD + porcelain status + untracked.
+# Hash of the working state: git HEAD + diff (content) + untracked names.
 # Used by the no-progress detector. Stable when nothing changed.
 loop_state_hash() {
   local cwd="${1:-$PWD}"
+  # shasum is macOS; sha1sum is Linux. Try both, fallback to no-op.
+  local _sha_cmd
+  if command -v shasum >/dev/null 2>&1; then
+    _sha_cmd="shasum"
+  elif command -v sha1sum >/dev/null 2>&1; then
+    _sha_cmd="sha1sum"
+  else
+    echo ""; return 0
+  fi
   { git -C "$cwd" rev-parse HEAD 2>/dev/null
+    git -C "$cwd" diff HEAD 2>/dev/null
     git -C "$cwd" status --porcelain 2>/dev/null
-  } | shasum 2>/dev/null | awk '{print $1}'
+  } | $_sha_cmd 2>/dev/null | awk '{print $1}'
 }
 
 # Validate a loop spec. rc 0 = ok, rc 2 = refuse.
 # Rule: must have >=1 bound. If autonomy==bounded-autonomous AND
-# require_external_termination, a success_criterion.command is mandatory.
+# require_external_termination is "always" or true, a success_criterion.command is mandatory.
 loop_validate_spec() {
-  local json="$1"
+  local json="${1:-}"
+  [[ -z "$json" ]] && return 2
   echo "$json" | jq -e '.bounds.max_iterations or .bounds.per_run_budget_usd or .bounds.timeout_minutes' >/dev/null 2>&1 || return 2
   local auto ext cmd
   auto="$(echo "$json" | jq -r '.autonomy // "checkpoint"' 2>/dev/null)"
-  ext="$(echo "$json" | jq -r '.require_external_termination // false' 2>/dev/null)"
+  ext="$(echo "$json" | jq -r '.require_external_termination // "never"' 2>/dev/null)"
   cmd="$(echo "$json" | jq -r '.success_criterion.command // empty' 2>/dev/null)"
-  if [[ "$auto" == "bounded-autonomous" && "$ext" == "true" && -z "$cmd" ]]; then
+  # Accept both boolean true (legacy loop-state.json) and string "always" (loop_policy schema).
+  if [[ "$auto" == "bounded-autonomous" && ( "$ext" == "always" || "$ext" == "true" ) && -z "$cmd" ]]; then
     return 2
   fi
   return 0
@@ -58,7 +70,9 @@ loop_validate_spec() {
 
 # Return the first tripped bound, or "ok". Pure function of the state JSON.
 loop_check_bounds() {
-  local json="$1" iter cap cost budget npc started now elapsed timeout
+  local json="${1:-}"
+  [[ -z "$json" ]] && { echo "ok"; return; }
+  local iter cap cost budget npc started now elapsed timeout
   iter="$(echo "$json"  | jq -r '.iteration // 0')"
   cap="$(echo "$json"   | jq -r '.bounds.max_iterations // 1000000')"
   cost="$(echo "$json"  | jq -r '.cost_so_far_usd // 0')"
@@ -66,8 +80,16 @@ loop_check_bounds() {
   npc="$(echo "$json"   | jq -r '.no_progress_count // 0')"
   timeout="$(echo "$json" | jq -r '.bounds.timeout_minutes // empty')"
   started="$(echo "$json" | jq -r '.started_at // empty')"
+  # Validate numeric fields before arithmetic to prevent injection or crash under set -u.
+  [[ "$iter"  =~ ^[0-9]+(\.[0-9]+)?$ ]] || iter=0
+  [[ "$cap"   =~ ^[0-9]+(\.[0-9]+)?$ ]] || cap=1000000
+  [[ "$npc"   =~ ^[0-9]+(\.[0-9]+)?$ ]] || npc=0
+  [[ "$cost"  =~ ^[0-9]+(\.[0-9]+)?$ ]] || cost=0
+  [[ -n "$budget"  && ! "$budget"  =~ ^[0-9]+(\.[0-9]+)?$ ]] && budget=""
+  [[ -n "$timeout" && ! "$timeout" =~ ^[0-9]+(\.[0-9]+)?$ ]] && timeout=""
   [[ "$iter" -ge "$cap" ]] && { echo "max_iterations"; return; }
-  if [[ -n "$budget" ]] && awk "BEGIN{exit !($cost >= $budget)}"; then echo "budget_exceeded"; return; fi
+  # Use awk -v to pass values to avoid code injection via string interpolation.
+  if [[ -n "$budget" ]] && awk -v c="$cost" -v b="$budget" 'BEGIN{exit !(c >= b)}'; then echo "budget_exceeded"; return; fi
   [[ "$npc" -ge 2 ]] && { echo "no_progress"; return; }
   if [[ -n "$timeout" && -n "$started" ]]; then
     now="$(date -u +%s 2>/dev/null)"; started="$(date -u -d "$started" +%s 2>/dev/null || date -u -jf '%Y-%m-%dT%H:%M:%SZ' "$started" +%s 2>/dev/null)"
