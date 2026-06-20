@@ -16,6 +16,12 @@ INPUT="$(cat 2>/dev/null || echo '{}')"
 SHA="$(echo "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)"
 [[ "$SHA" == "true" ]] && exit 0       # never re-block: allow stop
 
+# Per-session state (ADR-020): the session id in the payload is authoritative
+# for this stop event; export it so loop_read_state resolves THIS session's
+# file. Falls back to the in-session CLAUDE_CODE_SESSION_ID env when absent.
+_SID="$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)"
+[[ -n "$_SID" ]] && export CLAUDE_CODE_SESSION_ID="$_SID"
+
 STATE="$(loop_read_state)"
 ACTIVE="$(echo "$STATE" | jq -r '.active // false' 2>/dev/null)"
 [[ "$ACTIVE" == "true" ]] || exit 0    # no active loop -> allow stop

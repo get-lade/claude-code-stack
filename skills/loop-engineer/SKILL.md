@@ -37,6 +37,8 @@ start an unbounded or unverifiable autonomous loop.**
 5. **Write loop-state and announce the pattern.** On valid spec, source the lib
    and `loop_write_state "$SPEC_WITH_ACTIVE_TRUE"`. Print
    `pattern selected: <pattern> (<why>)` so a misroute is visible.
+   Loop-state is **per session** (ADR-020): it is keyed by `CLAUDE_CODE_SESSION_ID`,
+   so a loop you arm here never blocks another session's stops.
 
 6. **Hand to the loop.** Begin the work. The Stop-hook will block stops until the
    criterion passes or a bound trips. To stop early, the user runs
