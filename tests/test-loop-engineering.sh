@@ -261,11 +261,11 @@ out="$(run_deny '{"tool_input":{"command":"git merge-base HEAD~1 HEAD"}}')"
 out="$(run_deny '{"tool_input":{"command":"git reset HEAD~1"}}')"
 [[ -z "$out" ]] && ok "deny: git reset (no --hard) allowed" || bad "deny false-positive reset out=$out"
 
-# gh pr merge substring inside echo/grep
+# gh pr merge substring inside echo: the deny hook matches on the normalized string;
+# echo "gh pr merge" after quote-stripping becomes: echo gh pr merge
+# which contains "gh pr merge" and is denied (safe/conservative behavior).
 out="$(run_deny '{"tool_input":{"command":"echo \"gh pr merge\""}}')"
-# This is expected to be denied since we cannot safely distinguish intent in raw strings
-# for non-git patterns; the test just confirms behavior is consistent (deny = acceptable here)
-ok "deny: gh pr merge echo behavior consistent (deny is safe)"
+is_deny "$out" && ok "deny: gh pr merge echo denied (conservative, safe)" || bad "deny: gh pr merge echo out=$out"
 
 # --- Task 5: loop_policy schema + template ---
 
@@ -307,5 +307,87 @@ jq -e '.files.global[]? | select(.to | test("loop-engineer/SKILL.md"))' "$MAN" >
 # cost accrual fn
 [[ "$(loop_write_state '{"cost_so_far_usd":1}'; loop_accrue_cost 0.5; loop_read_state | jq -r '.cost_so_far_usd')" == "1.5" ]] \
   && ok "lib: cost accrual" || bad "lib: cost accrual"
+
+# --- Regression tests for new fixes ---
+
+# Fix 1: validate — bounded-autonomous + "auto" (schema default) + no criterion -> rc 2
+loop_validate_spec '{"autonomy":"bounded-autonomous","require_external_termination":"auto","bounds":{"max_iterations":5}}'
+[[ $? -eq 2 ]] && ok "fix1: auto + bounded-autonomous + no criterion -> rc 2" || bad "fix1: auto should require criterion"
+
+# Fix 1: validate — bounded-autonomous + "never" + no criterion -> rc 0
+loop_validate_spec '{"autonomy":"bounded-autonomous","require_external_termination":"never","bounds":{"max_iterations":5}}'
+[[ $? -eq 0 ]] && ok "fix1: never + no criterion -> rc 0" || bad "fix1: never should not require criterion"
+
+# Fix 2: validate — max_iterations non-integer -> rc 2
+loop_validate_spec '{"autonomy":"checkpoint","bounds":{"max_iterations":"2.5"}}' 2>/dev/null
+[[ $? -eq 2 ]] && ok "fix2: validate non-integer max_iterations -> rc 2" || bad "fix2: non-integer max_iterations should fail"
+
+loop_validate_spec '{"autonomy":"checkpoint","bounds":{"max_iterations":1.5}}' 2>/dev/null
+[[ $? -eq 2 ]] && ok "fix2: validate float max_iterations 1.5 -> rc 2" || bad "fix2: float max_iterations 1.5 should fail"
+
+# Fix 2: check_bounds — non-integer cap -> treat as bound tripped (max_iterations)
+r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":"2.5"},"cost_so_far_usd":0,"no_progress_count":0}' 2>/dev/null)"
+[[ "$r" == "max_iterations" ]] && ok "fix2: check_bounds non-integer cap -> max_iterations" || bad "fix2: check_bounds float cap got=$r"
+
+r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":1.5},"cost_so_far_usd":0,"no_progress_count":0}' 2>/dev/null)"
+[[ "$r" == "max_iterations" ]] && ok "fix2: check_bounds float cap 1.5 -> max_iterations" || bad "fix2: check_bounds float 1.5 cap got=$r"
+
+# Fix 3: stop hook timeout — a slow criterion does not hang when timeout(1) is present.
+# When timeout binary is absent (macOS default), the hook falls back to plain bash
+# and the test is skipped (not a code defect — the hook comment documents this).
+if command -v timeout >/dev/null 2>&1; then
+  loop_write_state '{"active":true,"iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"sleep 5"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+  _t_start="$(date +%s)"
+  out="$(LOOP_CRITERION_TIMEOUT=1 LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false}')"
+  _t_end="$(date +%s)"
+  _elapsed=$(( _t_end - _t_start ))
+  [[ $_elapsed -lt 5 ]] && ok "fix3: criterion timeout prevents hang (elapsed=${_elapsed}s)" || bad "fix3: criterion hung (elapsed=${_elapsed}s)"
+else
+  ok "fix3: timeout binary absent — hook uses plain-bash fallback (skip timing test)"
+fi
+
+# Fix 4: budget accrual — seed a loop_iteration row and assert cost accrues
+mkdir -p "$HOME/.claude/logs"
+printf '{"event":"loop_iteration","loop_id":"test-loop","cost_usd":0.25}\n' > "$HOME/.claude/logs/subagent-runs.jsonl"
+loop_write_state '{"active":true,"iteration":1,"bounds":{"max_iterations":99},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false}' >/dev/null 2>&1 || true
+_cost="$(loop_read_state | jq -r '.cost_so_far_usd')"
+# cost_so_far_usd should be > 0 (0.25 from the log row)
+awk -v c="$_cost" 'BEGIN{exit !(c > 0)}' 2>/dev/null \
+  && ok "fix4: cost accrues from log row (cost=$_cost)" || bad "fix4: cost did not accrue (cost=$_cost)"
+# cleanup
+rm -f "$HOME/.claude/logs/subagent-runs.jsonl"
+
+# Fix 6: irreversible-deny — env git push -> deny
+loop_write_state '{"active":true}'
+out="$(run_deny '{"tool_input":{"command":"env git push origin main"}}')"
+is_deny "$out" && ok "fix6: env git push -> deny" || bad "fix6: env git push not denied out=$out"
+
+# Fix 6: bash -c "git push" -> deny
+out="$(run_deny '{"tool_input":{"command":"bash -c \"git push origin main\""}}')"
+is_deny "$out" && ok "fix6: bash -c git push -> deny" || bad "fix6: bash -c git push not denied out=$out"
+
+# Fix 6: sudo git push -> deny
+out="$(run_deny '{"tool_input":{"command":"sudo git push origin main"}}')"
+is_deny "$out" && ok "fix6: sudo git push -> deny" || bad "fix6: sudo git push not denied out=$out"
+
+# Fix 6: git status still allowed through wrappers
+out="$(run_deny '{"tool_input":{"command":"git status"}}')"
+[[ -z "$out" ]] && ok "fix6: git status still allowed" || bad "fix6: git status denied out=$out"
+
+# Fix 7: loop-stop with HOME unset + inactive state -> exits 0, no crash
+(
+  unset HOME
+  loop_write_state '{"active":false}' 2>/dev/null || true
+  bash "$STOP" <<< '{"stop_hook_active":false}' >/dev/null 2>&1
+  echo "exit:$?"
+) | grep -q "exit:0" && ok "fix7: loop-stop HOME unset inactive -> exit 0" || bad "fix7: loop-stop HOME unset crashed"
+
+# Non-blocking fix 8: foreman SKILL.md uses "bounds" (plural)
+grep -q 'success_criterion.*bounds' "$FOREMAN" && ok "fix8: foreman uses bounds (plural)" || bad "fix8: foreman still has singular bound"
+
+# Non-blocking fix 9: no_progress_exit:false + npc>=2 -> ok
+r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":5},"cost_so_far_usd":0,"no_progress_count":2,"no_progress_exit":false,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "ok" ]] && ok "fix9: no_progress_exit:false + npc>=2 -> ok" || bad "fix9: got=$r"
 
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

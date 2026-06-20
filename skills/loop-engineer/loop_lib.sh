@@ -51,18 +51,31 @@ loop_state_hash() {
 }
 
 # Validate a loop spec. rc 0 = ok, rc 2 = refuse.
-# Rule: must have >=1 bound. If autonomy==bounded-autonomous AND
-# require_external_termination is "always" or true, a success_criterion.command is mandatory.
+# Rule: must have >=1 bound. If autonomy==bounded-autonomous, a
+# success_criterion.command is mandatory UNLESS require_external_termination is
+# explicitly "never". The schema default "auto" means required for
+# bounded-autonomous, so "auto" triggers the gate just like "always".
 loop_validate_spec() {
   local json="${1:-}"
   [[ -z "$json" ]] && return 2
+  # Reject non-integer numeric bounds to prevent bash arithmetic errors downstream.
+  local _mi _pb _to
+  _mi="$(echo "$json" | jq -r '.bounds.max_iterations // empty' 2>/dev/null)"
+  _pb="$(echo "$json" | jq -r '.bounds.per_run_budget_usd // empty' 2>/dev/null)"
+  _to="$(echo "$json" | jq -r '.bounds.timeout_minutes // empty' 2>/dev/null)"
+  # Each present bound must be an integer (no decimal point).
+  [[ -n "$_mi" && ! "$_mi" =~ ^[0-9]+$ ]] && return 2
+  [[ -n "$_pb" && ! "$_pb" =~ ^[0-9]+(\.[0-9]+)?$ ]] && { :; }  # budget allows decimal
+  [[ -n "$_to" && ! "$_to" =~ ^[0-9]+$ ]] && return 2
   echo "$json" | jq -e '.bounds.max_iterations or .bounds.per_run_budget_usd or .bounds.timeout_minutes' >/dev/null 2>&1 || return 2
   local auto ext cmd
   auto="$(echo "$json" | jq -r '.autonomy // "checkpoint"' 2>/dev/null)"
-  ext="$(echo "$json" | jq -r '.require_external_termination // "never"' 2>/dev/null)"
+  ext="$(echo "$json" | jq -r '.require_external_termination // "auto"' 2>/dev/null)"
   cmd="$(echo "$json" | jq -r '.success_criterion.command // empty' 2>/dev/null)"
-  # Accept both boolean true (legacy loop-state.json) and string "always" (loop_policy schema).
-  if [[ "$auto" == "bounded-autonomous" && ( "$ext" == "always" || "$ext" == "true" ) && -z "$cmd" ]]; then
+  # Require a success_criterion.command for bounded-autonomous unless the caller
+  # explicitly opts out with "never". "auto" (the schema default) and "always"
+  # and legacy boolean true all require the command.
+  if [[ "$auto" == "bounded-autonomous" && "$ext" != "never" && -z "$cmd" ]]; then
     return 2
   fi
   return 0
@@ -72,25 +85,37 @@ loop_validate_spec() {
 loop_check_bounds() {
   local json="${1:-}"
   [[ -z "$json" ]] && { echo "ok"; return; }
-  local iter cap cost budget npc started now elapsed timeout
+  local iter cap cost budget npc npe started now elapsed timeout
   iter="$(echo "$json"  | jq -r '.iteration // 0')"
   cap="$(echo "$json"   | jq -r '.bounds.max_iterations // 1000000')"
   cost="$(echo "$json"  | jq -r '.cost_so_far_usd // 0')"
   budget="$(echo "$json"| jq -r '.bounds.per_run_budget_usd // empty')"
   npc="$(echo "$json"   | jq -r '.no_progress_count // 0')"
+  # Use explicit false-check: jq's // alternative treats false as falsy, so
+  # '.no_progress_exit // true' returns true even when the field is false.
+  npe="$(echo "$json" | jq -r 'if .no_progress_exit == false then "false" else "true" end' 2>/dev/null)"
   timeout="$(echo "$json" | jq -r '.bounds.timeout_minutes // empty')"
   started="$(echo "$json" | jq -r '.started_at // empty')"
   # Validate numeric fields before arithmetic to prevent injection or crash under set -u.
-  [[ "$iter"  =~ ^[0-9]+(\.[0-9]+)?$ ]] || iter=0
-  [[ "$cap"   =~ ^[0-9]+(\.[0-9]+)?$ ]] || cap=1000000
+  # max_iterations and timeout_minutes must be integers; a float value is treated as
+  # the bound already tripped (safe: trips the cap rather than silently ignoring it).
+  [[ "$iter"  =~ ^[0-9]+$ ]] || iter=0
+  if [[ ! "$cap" =~ ^[0-9]+$ ]]; then
+    # Non-integer cap (e.g. 2.5) — treat as bound tripped.
+    echo "max_iterations"; return
+  fi
   [[ "$npc"   =~ ^[0-9]+(\.[0-9]+)?$ ]] || npc=0
   [[ "$cost"  =~ ^[0-9]+(\.[0-9]+)?$ ]] || cost=0
   [[ -n "$budget"  && ! "$budget"  =~ ^[0-9]+(\.[0-9]+)?$ ]] && budget=""
-  [[ -n "$timeout" && ! "$timeout" =~ ^[0-9]+(\.[0-9]+)?$ ]] && timeout=""
+  if [[ -n "$timeout" && ! "$timeout" =~ ^[0-9]+$ ]]; then
+    # Non-integer timeout — treat as bound tripped.
+    echo "timeout"; return
+  fi
   [[ "$iter" -ge "$cap" ]] && { echo "max_iterations"; return; }
   # Use awk -v to pass values to avoid code injection via string interpolation.
   if [[ -n "$budget" ]] && awk -v c="$cost" -v b="$budget" 'BEGIN{exit !(c >= b)}'; then echo "budget_exceeded"; return; fi
-  [[ "$npc" -ge 2 ]] && { echo "no_progress"; return; }
+  # Only trip no_progress when no_progress_exit is not explicitly false.
+  [[ "$npe" != "false" ]] && [[ "$npc" -ge 2 ]] && { echo "no_progress"; return; }
   if [[ -n "$timeout" && -n "$started" ]]; then
     now="$(date -u +%s 2>/dev/null)"; started="$(date -u -d "$started" +%s 2>/dev/null || date -u -jf '%Y-%m-%dT%H:%M:%SZ' "$started" +%s 2>/dev/null)"
     if [[ -n "$now" && -n "$started" ]]; then elapsed=$(( (now - started) / 60 )); [[ "$elapsed" -ge "$timeout" ]] && { echo "timeout"; return; }; fi

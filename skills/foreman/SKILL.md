@@ -47,7 +47,7 @@ You orchestrate the team. You don't write code, design, test, or review yourself
 
     Tiebreak: most-specific shape wins; ties → `react`. **Always print
     `pattern selected: <pattern> (<why>)`** so a misroute is visible. Emit the
-    `success_criterion` + `bound` into the loop spec for `/loop-engineer`. If the
+    `success_criterion` + `bounds` into the loop spec for `/loop-engineer`. If the
     task is a normal one-shot, skip this step.
 
 4. **Match the team.** For each task type, the default team is:

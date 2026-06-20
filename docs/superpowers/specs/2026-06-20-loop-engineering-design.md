@@ -112,12 +112,12 @@ Pre-flight gate + Stop-hook enforce:
 
 1. **External termination** — tests/eval/CI/sentinel via `coverage-snapshot`/`validate-output` **[S]**. Required for `bounded-autonomous`; downgraded to iter-cap for self-assessment patterns under strict.
 2. **Hard iteration cap** — `max_iterations` (SDKs don't enforce this).
-3. **Cost circuit-breaker** — **Phase 1 catches *between-iteration* only**: pre-flight `/cost-gate` **[S]** + per-iteration accrual of estimated cost (from `subagent-runs.jsonl`) into `loop-state.json`; halts before the *next* iteration. **It does NOT stop a single within-iteration runaway** — that's the Phase-2 live monitor. Residual risk stated explicitly. (`budget-guard` lives at `~/.claude/tools`, global, not guaranteed in cloud — `/cost-gate` is the in-stack path.)
+3. **Cost circuit-breaker** — **Phase 1 catches *between-iteration* only**: pre-flight `/cost-gate` **[S]** + per-iteration accrual of cost (summed from `event=="loop_iteration"` rows in `subagent-runs.jsonl` since `started_at`) into `loop-state.json`; halts before the *next* iteration. **Wired and real**: if the log has rows, `cost_so_far_usd` increments on every Stop-hook call; if no data exists, cost stays 0 (honest). **Does NOT stop a single within-iteration runaway** — that's the Phase-2 live monitor. Residual risk stated explicitly. (`budget-guard` lives at `~/.claude/tools`, global, not guaranteed in cloud — `/cost-gate` is the in-stack path.)
 4. **No-progress detector** — identical state-hash (git+fs) for 2 consecutive iters → exit.
-5. **Human checkpoint before irreversible** — `hooks/irreversible-deny.sh` denies `git push`, `git merge`, `deploy-edge`, bulk SQL, money movement, `rm -rf`; acceptance test: *push denied, status allowed*. Red-team tunes the list.
+5. **Human checkpoint before irreversible** — `hooks/irreversible-deny.sh` denies `git push`, `git merge`, `deploy-edge`, bulk SQL, money movement, `rm -rf`; strips leading `env` / `sudo` / `bash -c` / `sh -c` wrappers before matching so `env git push` and `bash -c "git push"` are also denied. Acceptance test: *push denied, status allowed*. Known residual bypasses (documented in hook): deeply nested shells, heredoc injection, `eval`, `$()` inside command string, custom git aliases, obfuscated env vars. Red-team tunes the list.
 6. **State in files+git** — durability via `loop-state.json` always; `commit_per_iteration` opt-in (squash/tag).
 7. **Durable corrections** — loop mistakes append to CLAUDE.md / memory (compounding fixes), wired to `/handoff` **[S]**.
-8. **Recursion cap** — `max_recursion_depth` (default 5).
+8. **Recursion cap** — `max_recursion_depth` (default 5). **ADVISORY in Phase 1**: the runtime does not enforce fan-out/recursion depth; `max_iterations` is the hard cap. Phase 2 will enforce this.
 
 ## 7. Stop-hook contract (load-bearing new artifact)
 
@@ -144,7 +144,7 @@ Reuses the §3 governance-hooks base. Summary: vendor `using-superpowers` (Tier 
 
 ## 11. Phasing (flagship — instrument alongside, not first)
 
-- **Phase 1:** `/loop-engineer` + pre-flight gate + Stop-hook + `irreversible-deny` + `loop_policy` (schema-migrated) + foreman routing + guardrails 1–8 + **per-run loop cost logging to `subagent-runs.jsonl` (instrument alongside)**. Vendored; cloud-compatible.
+- **Phase 1:** `/loop-engineer` + pre-flight gate + Stop-hook + `irreversible-deny` + `loop_policy` (schema-migrated) + foreman routing + guardrails 1–8 + **per-run loop cost logging to `subagent-runs.jsonl` (instrument alongside)**. Vendored; cloud-compatible. **Phase 1 residuals (stated, not hidden):** (a) `per_run_budget_usd` is between-iteration and advisory — cost is wired and accrues from real log data, but a within-iteration runaway is not halted until Phase 2; (b) `max_recursion_depth` is advisory — not runtime-enforced in Phase 1, `max_iterations` is the hard cap; (c) `irreversible-deny` known bypass patterns documented in hook comments.
 - **Phase 2:** Supabase `loop_runs` (Tier 3+) + **live mid-flight cost monitor** (closes the within-iteration gap) + telemetry + the ultracode signal + (optional) effort-enum widening.
 
 ## 12. Open questions

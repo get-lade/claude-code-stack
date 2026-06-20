@@ -42,15 +42,43 @@ CMD="$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 NORM="$CMD"
 NORM="$(printf '%s' "$NORM" | sed "s/\\\\//g; s/'//g; s/\"//g")"
 
-# Step 2+3: strip leading path and known shell dispatch prefixes repeatedly
+# Step 2+3: strip leading path and known shell dispatch prefixes repeatedly.
+# Also strips env / sudo / sh -c / bash -c wrappers so that
+# `env git push`, `sudo git push`, `bash -c "git push"` are caught.
+# Known residual bypasses (not worth the false-positive cost to block here):
+#   - Deeply nested shells: bash -c 'bash -c "git push"' (three+ levels)
+#   - Heredoc injection: bash -c "$(cat <<'EOF' ... EOF)"
+#   - $() or eval inside the command string
+#   - Custom git wrappers or aliases (e.g. mygit push)
+#   - Obfuscated env vars: x=push; git $x
 strip_prefixes() {
   local s="$1"
   # strip path prefix from leading binary
   s="$(printf '%s' "$s" | sed -E 's|^[[:space:]]*/[^[:space:]]*/||')"
-  # strip "command " / "exec " / "builtin " prefixes (repeat up to 3 times)
-  local i
-  for i in 1 2 3; do
+  # Repeat up to 5 times to peel env/sudo/sh-c/bash-c/command/exec/builtin layers.
+  local i lead
+  for i in 1 2 3 4 5; do
+    # strip "command " / "exec " / "builtin " prefixes
     s="$(printf '%s' "$s" | sed -E 's/^[[:space:]]*(command|exec|builtin)[[:space:]]+//')"
+    # strip "env " with optional VAR=val arguments (env FOO=bar git push -> git push)
+    s="$(printf '%s' "$s" | sed -E 's/^[[:space:]]*env[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*//')"
+    # strip plain "env " with no assignments
+    s="$(printf '%s' "$s" | sed -E 's/^[[:space:]]*env[[:space:]]+//')"
+    # strip "sudo " (with or without flags like -n, -E, -u user)
+    s="$(printf '%s' "$s" | sed -E 's/^[[:space:]]*sudo([[:space:]]+-[A-Za-z][^[:space:]]*)*[[:space:]]+//')"
+    # strip shell -c wrappers (sh -c, bash -c, dash -c, zsh -c) using pure bash
+    # to avoid macOS sed ERE alternation issues with double-quoted expressions.
+    lead="$(printf '%s' "$s" | awk '{print $1}')"
+    case "$lead" in
+      sh|bash|dash|zsh)
+        # Remove the "sh -c " prefix and strip surrounding quotes from the remainder.
+        s="$(printf '%s' "$s" | sed -E 's/^[[:space:]]*[a-z]+[[:space:]]+-c[[:space:]]+//')"
+        # strip leading/trailing single or double quote (already removed by Step 1,
+        # but guard in case they survived)
+        s="${s#\'}" ; s="${s%\'}"
+        s="${s#\"}" ; s="${s%\"}"
+        ;;
+    esac
     # strip another path prefix that may have been revealed
     s="$(printf '%s' "$s" | sed -E 's|^[[:space:]]*/[^[:space:]]*/||')"
   done
