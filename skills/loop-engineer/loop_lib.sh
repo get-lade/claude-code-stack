@@ -198,6 +198,49 @@ loop_live_cost() {
   ' "$log" 2>/dev/null || echo 0
 }
 
+# Phase-2 telemetry: record one finished loop run. Always appends a row to the
+# local JSONL telemetry log (always-on); additionally POSTs to the Supabase
+# stack.loop_runs table (004-loop-runs.sql) IFF both SUPABASE_URL and
+# SUPABASE_SERVICE_KEY are set and curl exists. No-op-safe: missing creds, missing
+# curl, or any network error never crash the caller (matches the cost-log pattern).
+# Usage: loop_runs_record '<loop-state-json-with-terminal-status>'
+loop_runs_record() {
+  local state="${1:-}"
+  [[ -z "$state" ]] && return 0
+  # Build the row from loop-state fields.
+  local row
+  row="$(echo "$state" | jq -c '{
+    loop_id:         (.loop_id // "loop"),
+    session_id:      (env.CLAUDE_CODE_SESSION_ID // null),
+    pattern:         (.pattern // null),
+    autonomy:        (.autonomy // null),
+    goal:            (.goal // null),
+    status:          (.status // "unknown"),
+    iterations:      (.iteration // 0),
+    recursion_depth: (.recursion_depth // 0),
+    cost_usd:        (.cost_so_far_usd // 0),
+    started_at:      (.started_at // null),
+    ended_at:        (now | todateiso8601)
+  }' 2>/dev/null)" || return 0
+  [[ -z "$row" ]] && return 0
+
+  # Always-on local telemetry.
+  local log="${_loop_home}/.claude/logs/loop-runs.jsonl"
+  mkdir -p "$(dirname "$log")" 2>/dev/null && printf '%s\n' "$row" >>"$log" 2>/dev/null || true
+
+  # Optional Supabase rollup (Tier 3+). Graceful no-op without creds/curl.
+  [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_SERVICE_KEY:-}" ]] && return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  curl -sf -X POST "${SUPABASE_URL%/}/rest/v1/loop_runs" \
+    -H "apikey: ${SUPABASE_SERVICE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
+    -H "Content-Type: application/json" \
+    -H "Content-Profile: stack" \
+    -H "Prefer: return=minimal" \
+    --data "$row" >/dev/null 2>&1 || true
+  return 0
+}
+
 # ---------------------------------------------------------------------------
 # Ultracode signal (Phase 2 / spec open-question 1)
 # ---------------------------------------------------------------------------

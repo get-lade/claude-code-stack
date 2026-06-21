@@ -29,7 +29,13 @@ ACTIVE="$(echo "$STATE" | jq -r '.active // false' 2>/dev/null)"
 # Malformed (read returned {} but file exists non-empty) -> fail-closed
 echo "$STATE" | jq -e '.bounds' >/dev/null 2>&1 || exit 0
 
-mark() { loop_write_state "$(echo "$STATE" | jq -c --arg s "$1" '.active=false | .status=$s')" 2>/dev/null || true; }
+# Mark the loop finished with a terminal status, persist, and record telemetry
+# (Phase 2). loop_runs_record is no-op-safe (local JSONL always; Supabase iff creds).
+mark() {
+  local _final; _final="$(echo "$STATE" | jq -c --arg s "$1" '.active=false | .status=$s')"
+  loop_write_state "$_final" 2>/dev/null || true
+  loop_runs_record "$_final" 2>/dev/null || true
+}
 
 # 1) External termination: run the success criterion command.
 # Wrapped in a timeout (default 120 s) so a hanging criterion never stalls
@@ -113,7 +119,9 @@ STATE="$(echo "$STATE" | jq -c --arg h "$CUR" --argjson n "$NPC" \
   '.iteration=((.iteration//0)+1) | .last_state_hash=$h | .no_progress_count=$n')"
 TRIP="$(loop_check_bounds "$STATE")"
 if [[ "$TRIP" != "ok" ]]; then
-  loop_write_state "$(echo "$STATE" | jq -c --arg s "$TRIP" '.active=false | .status=$s')" 2>/dev/null || true
+  _FINAL="$(echo "$STATE" | jq -c --arg s "$TRIP" '.active=false | .status=$s')"
+  loop_write_state "$_FINAL" 2>/dev/null || true
+  loop_runs_record "$_FINAL" 2>/dev/null || true   # Phase-2 telemetry
   exit 0   # bound tripped -> allow stop (escalation surfaced via status)
 fi
 

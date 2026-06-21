@@ -591,4 +591,26 @@ out="$(run_mon '{"tool_name":"Bash"}')"
 [[ -z "$out" ]] && ok "monitor: inactive -> allow" || bad "monitor inactive out=$out"
 : > "$LOG"
 
+# --- Task 5: Supabase loop_runs telemetry ---
+SQL="$REPO_ROOT/schemas/004-loop-runs.sql"
+[[ -f "$SQL" ]] && ok "telemetry: 004-loop-runs.sql present" || bad "telemetry: SQL missing"
+grep -q 'create table if not exists stack.loop_runs' "$SQL" && ok "telemetry: table defined" || bad "telemetry: no table"
+# balanced parens sanity
+_op="$(tr -cd '(' < "$SQL" | wc -c)"; _cp="$(tr -cd ')' < "$SQL" | wc -c)"
+[[ "$_op" == "$_cp" ]] && ok "telemetry: SQL parens balanced" || bad "telemetry: parens $_op/$_cp"
+
+# loop_runs_record: no Supabase creds -> no-op (rc 0) + local JSONL row written
+( unset SUPABASE_URL SUPABASE_SERVICE_KEY
+  loop_runs_record '{"loop_id":"LR1","status":"met","iteration":3,"cost_so_far_usd":1.25,"pattern":"ralph"}'
+  echo "rc=$?" ) | { read -r r; [[ "$r" == "rc=0" ]] && ok "telemetry: record rc=0 without creds" || bad "telemetry rc $r"; }
+LRLOG="$HOME/.claude/logs/loop-runs.jsonl"
+[[ -f "$LRLOG" ]] && [[ "$(jq -r 'select(.loop_id=="LR1") | .status' "$LRLOG" 2>/dev/null | tail -1)" == "met" ]] \
+  && ok "telemetry: local JSONL row written" || bad "telemetry: local row missing"
+# payload shape: numeric iterations + cost mapped correctly
+[[ "$(jq -r 'select(.loop_id=="LR1") | .iterations' "$LRLOG" 2>/dev/null | tail -1)" == "3" ]] \
+  && ok "telemetry: iterations mapped" || bad "telemetry: iterations wrong"
+# empty arg -> no-op rc 0
+loop_runs_record "" ; [[ $? -eq 0 ]] && ok "telemetry: empty arg no-op" || bad "telemetry empty arg"
+rm -f "$LRLOG" 2>/dev/null
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
