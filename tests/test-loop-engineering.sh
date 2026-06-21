@@ -759,4 +759,17 @@ echo "$eff" | jq -e 'index("fast") and index("balanced") and index("max")' >/dev
 # default unchanged
 [[ "$(jq -r '.properties.session_prefs.properties.model_effort.default' "$SCH")" == "balanced" ]] && ok "effort: default still balanced" || bad "effort default changed"
 
+# --- T5: vendored authoring skills (using-superpowers + brainstorming) ---
+for s in using-superpowers brainstorming; do
+  f="$REPO_ROOT/skills/$s/SKILL.md"
+  [[ -f "$f" ]] && ok "vendor: $s present" || bad "vendor: $s missing"
+  head -1 "$f" 2>/dev/null | grep -q '^---$' && ok "vendor: $s frontmatter" || bad "vendor: $s no frontmatter"
+done
+# brainstorming text-core: must NOT actually invoke a node server / GUI process
+! grep -qiE 'localhost:|127\.0\.0\.1|npm run|node .*\.js|express\(|listen\([0-9]' "$REPO_ROOT/skills/brainstorming/SKILL.md" \
+  && ok "vendor: brainstorming is text-core (no server)" || bad "vendor: brainstorming invokes server"
+# registered in tier-1 manifest
+jq -e '[.files.global[]?.from | select(test("using-superpowers|brainstorming"))] | length == 2' "$REPO_ROOT/config/tier-manifests/tier-1.json" >/dev/null 2>&1 \
+  && ok "vendor: tier-1 manifest copies both" || bad "vendor: manifest missing entries"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

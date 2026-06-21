@@ -6,6 +6,8 @@
   "files": {
     "global": [
       { "from": "skills/plan/SKILL.md", "to": "~/.claude/skills/plan/SKILL.md" },
+      { "from": "skills/using-superpowers/SKILL.md", "to": "~/.claude/skills/using-superpowers/SKILL.md" },
+      { "from": "skills/brainstorming/SKILL.md", "to": "~/.claude/skills/brainstorming/SKILL.md" },
       { "from": "skills/cost-gate/SKILL.md", "to": "~/.claude/skills/cost-gate/SKILL.md" },
       { "from": "skills/coverage-snapshot/SKILL.md", "to": "~/.claude/skills/coverage-snapshot/SKILL.md" },
       { "from": "skills/validate-output/SKILL.md", "to": "~/.claude/skills/validate-output/SKILL.md" },
@@ -30,6 +32,8 @@
   "requirements": [],
   "smoke_tests": [
     "test -f ~/.claude/skills/plan/SKILL.md",
+    "test -f ~/.claude/skills/using-superpowers/SKILL.md",
+    "test -f ~/.claude/skills/brainstorming/SKILL.md",
     "test -f ~/.claude/skills/cost-gate/SKILL.md",
     "test -f ~/.claude/skills/coverage-snapshot/SKILL.md",
     "test -f ~/.claude/skills/validate-output/SKILL.md",

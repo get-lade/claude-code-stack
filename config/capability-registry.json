@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-21T13:49:50Z",
+  "generated_at": "2026-06-21T13:54:41Z",
   "stack_version": "1.1.3",
   "capabilities": [
     {
@@ -87,6 +87,19 @@
       "invocation": {
         "slash": "/auto-merge",
         "natural_language": "per-repo opt-in for GitHub auto-merge gated on a required `run-tests` status check"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "brainstorming",
+      "kind": "skill",
+      "summary": "Diverge before you converge \u2014 generate and pressure-test multiple approaches before committing to one.",
+      "invocation": {
+        "slash": "/brainstorming",
+        "natural_language": "diverge before you converge \u2014 generate and pressure-test multiple approaches before committing to one"
       },
       "tier_min": 0,
       "user_invocable": true,
@@ -793,6 +806,19 @@
       "tier_min": 2,
       "user_invocable": true,
       "model_invocable": false,
+      "recommendable": true
+    },
+    {
+      "id": "using-superpowers",
+      "kind": "skill",
+      "summary": "The design-before-code operating discipline the ADR-021 gate enforces.",
+      "invocation": {
+        "slash": "/using-superpowers",
+        "natural_language": "the design-before-code operating discipline the ADR-021 gate enforces"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
       "recommendable": true
     },
     {
