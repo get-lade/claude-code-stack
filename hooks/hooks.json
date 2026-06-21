@@ -41,7 +41,8 @@
       {
         "matcher": "Workflow",
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/workflow-roster-check.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/workflow-roster-check.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loop-cost-monitor.sh" }
         ]
       },
       {
@@ -62,6 +63,12 @@
         "matcher": "Agent",
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-complete-log.sh" }
+        ]
+      },
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loop-cost-accrual.sh" }
         ]
       }
     ]

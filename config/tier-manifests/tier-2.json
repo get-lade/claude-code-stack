@@ -51,6 +51,7 @@
       { "from": "scripts/lib/cross-family-preflight.sh", "to": "~/.claude/scripts/lib/cross-family-preflight.sh", "executable": true },
       { "from": "hooks/loop-cost-monitor.sh", "to": "~/.claude/hooks/loop-cost-monitor.sh", "executable": true },
       { "from": "hooks/design-gate.sh", "to": "~/.claude/hooks/design-gate.sh", "executable": true },
+      { "from": "hooks/loop-cost-accrual.sh", "to": "~/.claude/hooks/loop-cost-accrual.sh", "executable": true },
       { "from": "hooks/loop-shape-nudge.sh", "to": "~/.claude/hooks/loop-shape-nudge.sh", "executable": true }
     ],
     "schemas": [
@@ -111,6 +112,9 @@
     "jq -e '[.hooks.PreToolUse[]? | select(.matcher==\"Bash\") | .hooks[]? | select(.command | test(\"loop-cost-monitor.sh\"))] | length >= 1' ~/.claude/settings.json",
     "test -x ~/.claude/hooks/design-gate.sh",
     "jq -e '[.hooks.PreToolUse[]? | select(.matcher | test(\"Edit\")) | .hooks[]? | select(.command | test(\"design-gate.sh\"))] | length >= 1' ~/.claude/settings.json",
+    "test -x ~/.claude/hooks/loop-cost-accrual.sh",
+    "jq -e '[.hooks.PostToolUse[]? | select(.matcher | test(\"Workflow\")) | .hooks[]? | select(.command | test(\"loop-cost-accrual.sh\"))] | length >= 1' ~/.claude/settings.json",
+    "jq -e '[.hooks.PreToolUse[]? | select(.matcher | test(\"Workflow\")) | .hooks[]? | select(.command | test(\"loop-cost-monitor.sh\"))] | length >= 1' ~/.claude/settings.json",
     "test -x ~/.claude/hooks/loop-shape-nudge.sh",
     "jq -e '[.hooks.UserPromptSubmit[]?.hooks[]? | select(.command | test(\"loop-shape-nudge.sh\"))] | length >= 1' ~/.claude/settings.json",
     "jq -e '[.hooks.Stop[]?.hooks[]? | select(.command | test(\"loop-stop.sh\"))] | length >= 1' ~/.claude/settings.json",

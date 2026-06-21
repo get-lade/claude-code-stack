@@ -705,17 +705,64 @@ awk -v v="$c" 'BEGIN{exit !(v==0)}' && ok "cost_from_usage: unknown model -> 0" 
 c="$(loop_cost_from_usage 0 0 claude-opus-4-8)"
 awk -v v="$c" 'BEGIN{exit !(v==0)}' && ok "cost_from_usage: zero -> 0" || bad "cost_from_usage zero=$c"
 
-# monitor: usage payload pushes over budget -> deny (logged sum 0 + live 3.5 >= 3)
+# ADR-024: real per-tool cost is recorded post-call by loop-cost-accrual.sh, then
+# enforced by the PreToolUse monitor via loop_live_cost (the old PreToolUse
+# usage-read branch was a no-op — a PreToolUse hook never sees tool_response).
+ACCRUE="$REPO_ROOT/hooks/loop-cost-accrual.sh"
+[[ -x "$ACCRUE" ]] && ok "accrual: hook executable" || bad "accrual: not executable"
+run_accrue() { LOOP_STATE_DIR="$HOME/.claude/session-state" LOOP_PRICE_TABLE="$LOOP_PRICE_TABLE" bash "$ACCRUE" <<< "$1"; }
 mkdir -p "$HOME/.claude/logs"; : > "$HOME/.claude/logs/subagent-runs.jsonl"
-loop_write_state '{"active":true,"loop_id":"LIVE1","bounds":{"per_run_budget_usd":3,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
-out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" LOOP_PRICE_TABLE="$LOOP_PRICE_TABLE" bash "$REPO_ROOT/hooks/loop-cost-monitor.sh" <<< '{"tool_name":"Agent","model":"claude-opus-4-8","tool_response":{"usage":{"input_tokens":200000,"output_tokens":100000}}}')"
-echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "monitor(p3): usage signal trips budget" || bad "monitor(p3) usage out=$out"
-# monitor: no usage + empty log + under budget -> allow
+
+# active loop + usage payload -> writes a loop_tool_cost row with real USD (3.5)
+loop_write_state '{"active":true,"loop_id":"ACC1","bounds":{"per_run_budget_usd":3,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+run_accrue '{"tool_name":"Agent","model":"claude-opus-4-8","tool_response":{"usage":{"input_tokens":200000,"output_tokens":100000}}}'
+acc="$(jq -rs '[.[]|select(.event=="loop_tool_cost" and .loop_id=="ACC1")|.cost_usd]|add // 0' "$HOME/.claude/logs/subagent-runs.jsonl")"
+awk -v v="$acc" 'BEGIN{exit !(v>3.49 && v<3.51)}' && ok "accrual: writes real-cost row" || bad "accrual cost=$acc"
+
+# monitor then denies via loop_live_cost summing that row (no usage in its payload)
+out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$REPO_ROOT/hooks/loop-cost-monitor.sh" <<< '{"tool_name":"Bash"}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "monitor(p3): accrued rows trip budget" || bad "monitor(p3) accrued out=$out"
+
+# loop_runs_record reflects real spend (max of snapshot vs live) -> ~3.5, not 0
+( unset SUPABASE_URL SUPABASE_SERVICE_KEY
+  loop_runs_record '{"loop_id":"ACC1","status":"met","iteration":1,"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z","pattern":"ralph"}' )
+rec="$(jq -r 'select(.loop_id=="ACC1")|.cost_usd' "$HOME/.claude/logs/loop-runs.jsonl" 2>/dev/null | tail -1)"
+awk -v v="$rec" 'BEGIN{exit !(v>3.49 && v<3.51)}' && ok "record: reflects real (live) cost" || bad "record cost=$rec"
+rm -f "$HOME/.claude/logs/loop-runs.jsonl"
+
+# accrual: no active loop -> no row
+loop_write_state '{"active":false,"loop_id":"ACC2"}'
+: > "$HOME/.claude/logs/subagent-runs.jsonl"
+run_accrue '{"tool_name":"Agent","tool_response":{"usage":{"input_tokens":200000,"output_tokens":100000}}}'
+[[ ! -s "$HOME/.claude/logs/subagent-runs.jsonl" ]] && ok "accrual: inactive -> no row" || bad "accrual inactive wrote a row"
+
+# accrual: active loop but no usage -> no row
+loop_write_state '{"active":true,"loop_id":"ACC3","bounds":{"per_run_budget_usd":3},"started_at":"2000-01-01T00:00:00Z"}'
+run_accrue '{"tool_name":"Bash"}'
+[[ ! -s "$HOME/.claude/logs/subagent-runs.jsonl" ]] && ok "accrual: no usage -> no row" || bad "accrual no-usage wrote a row"
+
+# monitor: no cost + under budget -> allow
 loop_write_state '{"active":true,"loop_id":"LIVE2","bounds":{"per_run_budget_usd":100,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
 out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$REPO_ROOT/hooks/loop-cost-monitor.sh" <<< '{"tool_name":"Bash"}')"
-[[ -z "$out" ]] && ok "monitor(p3): no usage + under budget -> allow" || bad "monitor(p3) allow out=$out"
+[[ -z "$out" ]] && ok "monitor(p3): no cost + under budget -> allow" || bad "monitor(p3) allow out=$out"
 unset LOOP_PRICE_TABLE
 : > "$HOME/.claude/logs/subagent-runs.jsonl"
+
+# Stop hook is a true hard cap (ADR-024): loop_tool_cost rows over budget, goal
+# unmet -> Stop trips budget_exceeded (folds loop_live_cost into the bound check).
+STOP="$REPO_ROOT/hooks/loop-stop.sh"
+printf '%s\n' '{"event":"loop_tool_cost","loop_id":"HC1","cost_usd":4.0,"ts":"2000-01-02T00:00:00Z"}' >> "$HOME/.claude/logs/subagent-runs.jsonl"
+CLAUDE_CODE_SESSION_ID="hcSess" loop_write_state '{"active":true,"loop_id":"HC1","bounds":{"per_run_budget_usd":3,"max_iterations":99,"max_recursion_depth":9},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z","no_progress_count":0}'
+LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false,"session_id":"hcSess"}' >/dev/null 2>&1
+hcstatus="$(CLAUDE_CODE_SESSION_ID="hcSess" loop_read_state | jq -r '.status')"
+[[ "$hcstatus" == "budget_exceeded" ]] && ok "stop(p3): tool-cost rows trip hard cap" || bad "stop(p3) hard cap status=$hcstatus"
+rm -f "$HOME/.claude/session-state/loop-state.hcSess.json" 2>/dev/null
+: > "$HOME/.claude/logs/subagent-runs.jsonl"
+
+# Registration (ADR-024 blocker fixes): monitor enforces on Workflow; accrual on Workflow
+TPL="$REPO_ROOT/config/settings.team.template.json"
+jq -e '[.hooks.PreToolUse[]? | select(.matcher|test("Workflow")) | .hooks[]? | select(.command|test("loop-cost-monitor.sh"))]|length>=1' "$TPL" >/dev/null 2>&1 && ok "register: monitor enforces on Workflow" || bad "register: monitor not on Workflow"
+jq -e '[.hooks.PostToolUse[]? | select(.matcher|test("Workflow")) | .hooks[]? | select(.command|test("loop-cost-accrual.sh"))]|length>=1' "$TPL" >/dev/null 2>&1 && ok "register: accrual on Workflow" || bad "register: accrual not on Workflow"
 
 # --- T1: telemetry feedback (loop_stats + loop_calibrate + /loop-review) ---
 [[ -f "$REPO_ROOT/skills/loop-review/SKILL.md" ]] && ok "loop-review: skill present" || bad "loop-review: missing"
@@ -734,6 +781,14 @@ ST="$(loop_stats "$STATLOG")"
 [[ "$(echo "$ST" | jq -r '.[] | select(.pattern=="ralph") | .runs')" == "3" ]] && ok "stats: ralph runs=3" || bad "stats ralph runs"
 p95="$(echo "$ST" | jq -r '.[] | select(.pattern=="ralph") | .p95_iterations')"
 [[ "$p95" == "20" ]] && ok "stats: p95 iterations" || bad "stats p95=$p95"
+# loop_stats_table (ADR-024): deterministic aligned rendering
+TBL="$(loop_stats_table "$STATLOG")"
+echo "$TBL" | head -1 | grep -q 'PATTERN' && ok "stats_table: header row" || bad "stats_table header"
+echo "$TBL" | grep -q 'ralph' && ok "stats_table: pattern row present" || bad "stats_table ralph row"
+[[ "$(echo "$TBL" | wc -l | tr -d ' ')" == "3" ]] && ok "stats_table: header + 2 rows" || bad "stats_table rows=$(echo "$TBL" | wc -l | tr -d ' ')"
+EMPTY="$(mktemp)"; : > "$EMPTY"
+[[ -z "$(loop_stats_table "$EMPTY")" ]] && ok "stats_table: empty -> nothing" || bad "stats_table empty not blank"
+rm -f "$EMPTY"
 # calibrate: proposed >= ceil(p95*1.2)=24, and >= current(25) -> 25
 CAL="$(loop_calibrate 25 "$STATLOG")"
 prop="$(echo "$CAL" | jq -r '.[] | select(.pattern=="ralph") | .proposed_max_iterations')"
