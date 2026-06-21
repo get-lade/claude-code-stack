@@ -25,7 +25,7 @@ value first (marked "(current)"). Keep it to these six:
 | Pref | Options |
 |---|---|
 | **Communication style** | terse · balanced · thorough |
-| **Model effort** | fast · balanced · max |
+| **Model effort** | minimal · fast · balanced · thorough · max |
 | **Explanation verbosity** | minimal · normal · teaching |
 | **Orchestration mode** | main-thread · hybrid · agent-teams · dynamic-workflows |
 | **Cost-alert sensitivity** | relaxed · normal · strict |

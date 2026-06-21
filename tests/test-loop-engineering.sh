@@ -746,4 +746,17 @@ prop2="$(echo "$CAL2" | jq -r '.[] | select(.pattern=="ralph") | .proposed_max_i
 echo "$CAL" | jq -e 'type=="array"' >/dev/null 2>&1 && ok "calibrate: returns array (no side effects)" || bad "calibrate type"
 rm -f "$STATLOG"
 
+# --- T4: 5-point effort enum (additive; legacy is a subset) ---
+SCH="$REPO_ROOT/schemas/stack-config-schema.json"
+DEF="$REPO_ROOT/schemas/stack-defaults-schema.json"
+eff="$(jq -c '.properties.session_prefs.properties.model_effort.enum' "$SCH" 2>/dev/null)"
+[[ "$(echo "$eff" | jq -r 'length')" == "5" ]] && ok "effort: 5 values in config schema" || bad "effort config count=$eff"
+echo "$eff" | jq -e 'index("minimal") and index("thorough")' >/dev/null 2>&1 && ok "effort: minimal+thorough added" || bad "effort new values missing"
+# legacy values still valid (back-compat = subset)
+echo "$eff" | jq -e 'index("fast") and index("balanced") and index("max")' >/dev/null 2>&1 && ok "effort: legacy values retained" || bad "effort legacy missing"
+# defaults schema kept in sync
+[[ "$(jq -r '.properties.session_prefs_defaults.properties.model_effort.enum | length' "$DEF" 2>/dev/null)" == "5" ]] && ok "effort: defaults schema in sync" || bad "effort defaults out of sync"
+# default unchanged
+[[ "$(jq -r '.properties.session_prefs.properties.model_effort.default' "$SCH")" == "balanced" ]] && ok "effort: default still balanced" || bad "effort default changed"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

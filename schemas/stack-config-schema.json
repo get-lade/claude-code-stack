@@ -110,7 +110,7 @@
       "description": "v1.2: Project-level default session preferences offered by /session, /goodmorning, /project-init. Live session overrides are written to ~/.claude/session-state/current-prefs.json; this block is the project fallback. Precedence: session-state > this > stack-defaults.session_prefs_defaults > built-in.",
       "properties": {
         "communication_style": { "type": "string", "enum": ["terse", "balanced", "thorough"], "default": "balanced", "description": "Maps to the brevity-drift word/sentence budgets." },
-        "model_effort": { "type": "string", "enum": ["fast", "balanced", "max"], "default": "balanced", "description": "Opus 4.8 effort preference for the session." },
+        "model_effort": { "type": "string", "enum": ["minimal", "fast", "balanced", "thorough", "max"], "default": "balanced", "description": "Opus 4.8 effort preference for the session (5-point, ADR-022). Legacy fast/balanced/max remain valid (subset)." },
         "explanation_verbosity": { "type": "string", "enum": ["minimal", "normal", "teaching"], "default": "normal" },
         "orchestration_mode": { "type": "string", "enum": ["main-thread", "agent-teams", "hybrid", "dynamic-workflows"], "description": "Session orchestration override; falls back to top-level orchestration_mode if unset." },
         "cost_alert_sensitivity": { "type": "string", "enum": ["relaxed", "normal", "strict"], "default": "normal" },
