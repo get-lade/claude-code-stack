@@ -669,4 +669,28 @@ rm -f "$CORR" 2>/dev/null
 [[ -f "$CORR" ]] && [[ -n "$(jq -r 'select(.loop_id=="SH1")' "$CORR" 2>/dev/null)" ]] && ok "corrections: stop-hook records bound-trip" || bad "corrections: stop-hook missing"
 rm -f "$CORR" "$HOME/.claude/session-state/loop-state.corrSess.json" 2>/dev/null
 
+# --- T3: per-path design-gate marker ---
+GATE="$REPO_ROOT/hooks/design-gate.sh"
+run_gate() { LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$GATE" <<< "$1"; }
+mkdir -p "$HOME/.claude/session-state"
+MK="$HOME/.claude/session-state/design-approved.json"
+
+# path-scoped marker: matching glob -> allow; non-matching source -> deny
+echo '{"active":true,"approved_paths":["skills/foo/**"]}' > "$MK"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+[[ -z "$out" ]] && ok "gate(p3): approved path allowed" || bad "gate(p3) approved out=$out"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/other/x.sh"}}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "gate(p3): unapproved path denied" || bad "gate(p3) unapproved out=$out"
+
+# legacy bare {active:true} -> all source allowed (back-compat)
+echo '{"active":true}' > "$MK"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/other/x.sh"}}')"
+[[ -z "$out" ]] && ok "gate(p3): legacy marker allows all source" || bad "gate(p3) legacy out=$out"
+
+# empty approved_paths -> treated as session-wide (allow)
+echo '{"active":true,"approved_paths":[]}' > "$MK"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/other/x.sh"}}')"
+[[ -z "$out" ]] && ok "gate(p3): empty approved_paths = session-wide" || bad "gate(p3) empty out=$out"
+rm -f "$MK"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

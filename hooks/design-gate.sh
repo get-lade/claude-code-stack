@@ -44,10 +44,26 @@ case "$FP" in
 esac
 
 # Approved-design marker present? -> allow.
+# Phase-3 (ADR-022): the marker may scope approval to paths via approved_paths
+# (a glob array). Match rules:
+#   - approved_paths present + non-empty -> allow only if the target matches a glob
+#   - bare {"active":true} (no/empty approved_paths) -> allow all source (legacy)
 STATE_DIR="${LOOP_STATE_DIR:-${HOME:-/tmp}/.claude/session-state}"
 MARKER="$STATE_DIR/design-approved.json"
 if [[ -f "$MARKER" ]] && [[ "$(jq -r '.active // false' "$MARKER" 2>/dev/null)" == "true" ]]; then
-  exit 0
+  _NPATHS="$(jq -r '(.approved_paths // []) | length' "$MARKER" 2>/dev/null)"
+  if [[ -z "$_NPATHS" || "$_NPATHS" == "0" ]]; then
+    exit 0   # legacy session-wide approval
+  fi
+  # Path-scoped: allow iff FP matches an approved glob (case-statement glob match).
+  while IFS= read -r _glob; do
+    [[ -z "$_glob" ]] && continue
+    # shellcheck disable=SC2254
+    case "$FP" in
+      $_glob) exit 0 ;;
+    esac
+  done < <(jq -r '.approved_paths[]?' "$MARKER" 2>/dev/null)
+  # marker exists but no glob matched -> fall through to deny
 fi
 
 # Ultracode on + source file + no approved design -> deny.

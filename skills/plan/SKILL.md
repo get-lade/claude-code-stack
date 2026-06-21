@@ -109,13 +109,19 @@ Do NOT start implementing. Do NOT background it. Wait for the word.
 When the user approves (says "proceed" or equivalent), write the approval marker
 the design gate reads, so subsequent source edits are unblocked under ultracode:
 
+Scope the approval to the paths this plan touches (Phase-3, ADR-022) so the gate
+stays precise — only the planned files unlock, not all source:
+
 ```bash
 mkdir -p ~/.claude/session-state
-printf '{"active":true,"approved_at":"%s","plan":"%s"}\n' \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "<plan-path>" \
+# approved_paths = shell globs for the files/dirs this plan covers.
+jq -n --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg plan "<plan-path>" \
+  --argjson paths '["<glob1>","<glob2>"]' \
+  '{active:true, approved_at:$at, plan:$plan, approved_paths:$paths}' \
   > ~/.claude/session-state/design-approved.json
 ```
 
-This is a no-op when ultracode is off (the gate is inactive then). It is the
-authoring path that satisfies `hooks/design-gate.sh` — `/plan` writes the marker,
-the gate enforces it.
+If you cannot enumerate paths, write `approved_paths: []` (or omit it) for a
+session-wide approval (legacy behavior). This is a no-op when ultracode is off
+(the gate is inactive then). `/plan` writes the marker; `hooks/design-gate.sh`
+enforces it.
