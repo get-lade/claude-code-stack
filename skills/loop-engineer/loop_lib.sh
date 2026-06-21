@@ -241,7 +241,7 @@ loop_runs_record() {
   return 0
 }
 
-# Phase-3 (ADR-022): aggregate loop telemetry from the local loop-runs.jsonl into
+# Phase-3 (ADR-023): aggregate loop telemetry from the local loop-runs.jsonl into
 # per-pattern stats. Prints a JSON array (one object per pattern). Empty/no log ->
 # []. Fail-safe. Optional arg overrides the log path (for tests).
 loop_stats() {
@@ -280,7 +280,7 @@ loop_calibrate() {
   ' 2>/dev/null || echo '[]'
 }
 
-# Phase-3 (ADR-022): convert token usage to USD via the single audited price
+# Phase-3 (ADR-023): convert token usage to USD via the single audited price
 # table (config/model-routing.json -> providers.*.models[id].pricing_per_million_*).
 # Usage: loop_cost_from_usage <input_tokens> <output_tokens> [model_id]
 # Prints a USD number (0 on any error / unknown model). Fail-safe.

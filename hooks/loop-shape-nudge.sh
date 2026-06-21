@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: auto-enablement for loop-engineering (ADR-022 / Phase 3).
+# UserPromptSubmit hook: auto-enablement for loop-engineering (ADR-023 / Phase 3).
 # When a prompt looks like iterate-until-verified work AND the user has not yet
 # been onboarded to governed loops, inject a one-time reminder telling the
 # assistant to offer the onboarding choices (governed loop? autonomy? ultracode?

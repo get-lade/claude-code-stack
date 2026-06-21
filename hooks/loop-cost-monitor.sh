@@ -37,7 +37,7 @@ STARTED="$(echo "$STATE" | jq -r '.started_at // empty' 2>/dev/null)"
 TOTAL="$(loop_live_cost "$LID" "$STARTED" 2>/dev/null || echo 0)"
 [[ "$TOTAL" =~ ^[0-9]+(\.[0-9]+)?$ ]] || exit 0
 
-# Phase-3 (ADR-022): best-effort real token signal. If this tool-call payload
+# Phase-3 (ADR-023): best-effort real token signal. If this tool-call payload
 # carries usage, convert to USD and add it to the logged-row sum so a costly call
 # is caught immediately, not one log row later. Absent usage -> logged sum only.
 INPUT_RAW="$(cat 2>/dev/null || echo '{}')"

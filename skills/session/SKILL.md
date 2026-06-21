@@ -61,7 +61,7 @@ off → `false`** (unquoted — the hook compares the literal `false`; a quoted
 `brevity-drift.sh` reads `communication_style` on the next turn, and you (the
 assistant) honor effort/verbosity/orchestration directly for the session.
 
-**Governed loops (ADR-022):** the loop choice sets `loop_policy.default_autonomy`
+**Governed loops (ADR-023):** the loop choice sets `loop_policy.default_autonomy`
 (via `/stack-config`; `off` ⇒ checkpoint floor) and always writes
 `~/.claude/session-state/loop-onboarded.json` so the loop-shape nudge stops
 offering. This is also the onboarding the `loop-shape-nudge.sh` hook points

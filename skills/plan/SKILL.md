@@ -109,7 +109,7 @@ Do NOT start implementing. Do NOT background it. Wait for the word.
 When the user approves (says "proceed" or equivalent), write the approval marker
 the design gate reads, so subsequent source edits are unblocked under ultracode:
 
-Scope the approval to the paths this plan touches (Phase-3, ADR-022) so the gate
+Scope the approval to the paths this plan touches (Phase-3, ADR-023) so the gate
 stays precise — only the planned files unlock, not all source:
 
 ```bash

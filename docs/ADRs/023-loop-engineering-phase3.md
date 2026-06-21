@@ -1,4 +1,4 @@
-# ADR 022: Loop-Engineering Phase 3 — observability, smarter control, authoring path
+# ADR 023: Loop-Engineering Phase 3 — observability, smarter control, authoring path
 
 Date: 2026-06-21
 Status: accepted

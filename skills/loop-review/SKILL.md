@@ -47,4 +47,4 @@ Turn loop telemetry into tuning decisions. You report; the human applies.
 - Local `~/.claude/logs/loop-runs.jsonl` is always-on; the Supabase
   `stack.loop_runs_30d` view (Tier 3+) is the cross-machine rollup when creds are
   configured.
-- Calibration is advisory by design (ADR-022): a loop never rewrites its own caps.
+- Calibration is advisory by design (ADR-023): a loop never rewrites its own caps.

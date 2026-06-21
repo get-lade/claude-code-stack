@@ -44,7 +44,7 @@ case "$FP" in
 esac
 
 # Approved-design marker present? -> allow.
-# Phase-3 (ADR-022): the marker may scope approval to paths via approved_paths
+# Phase-3 (ADR-023): the marker may scope approval to paths via approved_paths
 # (a glob array). Match rules:
 #   - approved_paths present + non-empty -> allow only if the target matches a glob
 #   - bare {"active":true} (no/empty approved_paths) -> allow all source (legacy)

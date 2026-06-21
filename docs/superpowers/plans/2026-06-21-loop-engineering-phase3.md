@@ -1,7 +1,7 @@
 # Loop-Engineering Control Plane — Phase 3 Implementation Plan
 
 > **STATUS: COMPLETE (PR #42).** All tasks T0–T7 shipped; 159 loop tests + full
-> repo suite green; tier-1/2/3 installs pass (47/103/110). ADR-022 accepted. The
+> repo suite green; tier-1/2/3 installs pass (47/103/110). ADR-023 accepted. The
 > checkbox steps below are the as-built record.
 
 > **For agentic workers:** TDD task-by-task. Steps use checkbox (`- [ ]`) syntax.
@@ -28,7 +28,7 @@ Phase-1/2 enforcement contracts (Stop-hook, deny shape) — Phase 3 builds *on* 
 
 ---
 
-## Task 0 — ADR-022 (Phase 3 decisions)
+## Task 0 — ADR-023 (Phase 3 decisions)
 
 **Files:** new `docs/ADRs/022-loop-engineering-phase3.md`.
 
@@ -43,7 +43,7 @@ Record the cross-cutting decisions that the tasks below assume:
 - Effort enum widening is **additive** — old `fast/balanced/max` values keep
   working (mapped onto the new 5-point scale).
 
-- [ ] Write ADR-022 with Context / Decision / Consequences / Alternatives.
+- [ ] Write ADR-023 with Context / Decision / Consequences / Alternatives.
 - [ ] Commit.
 
 ---
@@ -110,7 +110,7 @@ effort reader(s) + `/stack-config` (ADR-018) dashboard; migration note for the
 old 3-value form; test.
 
 Widen `fast | balanced | max` → `minimal | fast | balanced | thorough | max`
-(names TBD in ADR-022). Old values map onto the new scale
+(names TBD in ADR-023). Old values map onto the new scale
 (`fast→fast`, `balanced→balanced`, `max→max`); readers accept both. Surface the
 new dial in the `/stack-config` dashboard.
 
@@ -203,10 +203,10 @@ defaults so it's invisible afterward. Non-loop requests are never interrupted.
 - [ ] `bash scripts/gen-capability-registry.sh --check` → fresh (new skills).
 - [ ] Dry-run installs tier-1/2/3 → "All checks passed."
 - [ ] Full repo `tests/test-*.sh` suite green.
-- [ ] Docs: ADR-022 accepted; spec §11 gains a Phase-3 SHIPPED line; ADR-019
+- [ ] Docs: ADR-023 accepted; spec §11 gains a Phase-3 SHIPPED line; ADR-019
       "Phase 2 status" note extended.
 
-## Open questions (resolve in ADR-022)
+## Open questions (resolve in ADR-023)
 
 1. Effort enum names (5-point) and the exact legacy→new mapping.
 2. Calibration formula + whether `/loop-review` may *offer* to write via

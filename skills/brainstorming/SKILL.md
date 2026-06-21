@@ -12,7 +12,7 @@ tools: Read
 
 The diverge step of design-before-code. Goal: surface real alternatives and their
 tradeoffs **before** anyone is attached to an approach. Text-only conversation
-(vendored text core per ADR-022; no GUI, no background process).
+(vendored text core per ADR-023; no GUI, no background process).
 
 ## Steps
 
