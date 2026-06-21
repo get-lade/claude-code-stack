@@ -151,6 +151,49 @@ corrections into the next-session doc so the lesson carries forward.
 - [ ] Implement fn + Stop-hook wiring + handoff surfacing.
 - [ ] Pass + commit.
 
+## Task 7 — auto-enablement + novice onboarding (make it automatic)
+
+**Files:** new `hooks/loop-shape-nudge.sh` (`UserPromptSubmit`); register in
+`config/settings.team.template.json` + `hooks/hooks.json`; modify
+`skills/session/SKILL.md` and `skills/project-init/SKILL.md` (add a loop/autonomy
+question group); tier-2 manifest + smoke test; test.
+
+Goal: a user who knows nothing about loop-eng gets prompted **once**, in plain
+language, exactly when their request is loop-shaped — and the answers become
+defaults so it's invisible afterward. Non-loop requests are never interrupted.
+
+**Three stages:**
+
+1. **Classify (trigger).** `loop-shape-nudge.sh` reuses foreman's loop-shape
+   taxonomy on the submitted prompt. Loop-appropriate = run-until-tests-pass,
+   babysit-PRs, eval-until-threshold, long refactor/migration, "until X",
+   recurring/scheduled. One-shot Q&A / single edit / explain / read-only → emit
+   nothing (the "unless not loop-appropriate" guardrail). Conservative: when
+   unsure, stay silent.
+
+2. **Ask once (onboarding).** On a loop-shaped prompt with no onboarding marker,
+   the hook surfaces a one-time, novice-framed prompt (the main thread renders it
+   via `AskUserQuestion`), recommended option pre-selected:
+   - "Run this as a governed loop (iterate until done)?" — yes *(rec)* / one-shot
+   - autonomy — `checkpoint` *(rec)* / `bounded-checkpoint` / `bounded-autonomous`
+     (clamped to the tier ceiling)
+   - "Raise autonomy for this session (ultracode)?" — off *(rec)* / on
+   - "Design-first (brainstorming → /plan) before code?" — on *(rec)* / off
+   Then write `~/.claude/session-state/loop-onboarded.json` so it never re-asks.
+
+3. **Persist as default.** The same question group is added to `/session` and
+   `/project-init` so it's part of the standard onboarding — answers land in
+   `session_prefs` + `loop_policy.default_autonomy`. Thereafter loops auto-arm at
+   the chosen autonomy; ultracode / design-gate follow the saved preference.
+
+- [ ] Tests: a loop-shaped prompt with no marker → hook emits the onboarding
+      payload; a one-shot/explain prompt → hook emits nothing; marker present →
+      no re-prompt; `/session` and `/project-init` write the loop prefs; tier
+      ceiling clamps the offered autonomy.
+- [ ] Implement hook + registration + `/session` + `/project-init` groups +
+      manifest + smoke test.
+- [ ] Pass + commit.
+
 ---
 
 ## Final verification
