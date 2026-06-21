@@ -33,7 +33,21 @@ merge_json() {
   # accumulator instead of the original inputs, which fails on nested data.
   local tmp
   tmp="$(mktemp)"
+  # After the generic merge, collapse Claude hook blocks that share a matcher.
+  # The generic array rule (`($a+$b)|unique`) dedups only byte-identical
+  # objects, so a base `{matcher:"Bash",hooks:[X]}` and a tier fragment
+  # `{matcher:"Bash",hooks:[X,Y]}` survive as two blocks — duplicating the
+  # matcher and re-running X. merge_hook_groups regroups each event array by
+  # .matcher and order-stable-dedups the concatenated hooks into one block.
   jq -s '
+    def dedup_stable: reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end);
+    def merge_hook_groups:
+      group_by(.matcher)
+      | map(
+          (.[0].matcher) as $m
+          | (map(.hooks // []) | add | dedup_stable) as $h
+          | if $m == null then {hooks: $h} else {matcher: $m, hooks: $h} end
+        );
     def deep_merge(a; b):
       a as $a | b as $b |
       if ($a | type) == "object" and ($b | type) == "object" then
@@ -43,6 +57,10 @@ merge_json() {
       elif $a == null then $b
       else $a end;
     deep_merge(.[0]; .[1])
+    | if (.hooks | type) == "object" then
+        .hooks |= with_entries(
+          if (.value | type) == "array" then .value |= merge_hook_groups else . end)
+      else . end
   ' "$target" "$source" > "$tmp"
 
   # Resolve conflicts — stack value applied only on approval.
