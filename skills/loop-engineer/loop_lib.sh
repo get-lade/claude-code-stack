@@ -67,6 +67,11 @@ loop_state_hash() {
   { git -C "$cwd" rev-parse HEAD 2>/dev/null
     git -C "$cwd" diff HEAD 2>/dev/null
     git -C "$cwd" status --porcelain 2>/dev/null
+    # Phase-2 (d): include the byte-contents of untracked, non-ignored files so a
+    # loop that only edits an untracked file is detected as making progress.
+    # --exclude-standard honors .gitignore; -z + xargs -0 are filename-safe.
+    git -C "$cwd" ls-files --others --exclude-standard -z 2>/dev/null \
+      | (cd "$cwd" 2>/dev/null && xargs -0 cat 2>/dev/null)
   } | $_sha_cmd 2>/dev/null | awk '{print $1}'
 }
 
@@ -107,9 +112,13 @@ loop_validate_spec() {
 loop_check_bounds() {
   local json="${1:-}"
   [[ -z "$json" ]] && { echo "ok"; return; }
-  local iter cap cost budget npc npe started now elapsed timeout
+  local iter cap cost budget npc npe started now elapsed timeout depth dcap
   iter="$(echo "$json"  | jq -r '.iteration // 0')"
   cap="$(echo "$json"   | jq -r '.bounds.max_iterations // 1000000')"
+  # Phase-2 (c): recursion depth is now a hard bound (was advisory in Phase 1).
+  # Callers increment .recursion_depth on fan-out; bound is .bounds.max_recursion_depth.
+  depth="$(echo "$json" | jq -r '.recursion_depth // 0')"
+  dcap="$(echo "$json"  | jq -r '.bounds.max_recursion_depth // empty')"
   cost="$(echo "$json"  | jq -r '.cost_so_far_usd // 0')"
   budget="$(echo "$json"| jq -r '.bounds.per_run_budget_usd // empty')"
   npc="$(echo "$json"   | jq -r '.no_progress_count // 0')"
@@ -132,6 +141,12 @@ loop_check_bounds() {
   if [[ -n "$timeout" && ! "$timeout" =~ ^[0-9]+$ ]]; then
     # Non-integer timeout — treat as bound tripped.
     echo "timeout"; return
+  fi
+  # Recursion depth check (before iteration): a non-integer cap is treated as tripped.
+  if [[ -n "$dcap" ]]; then
+    [[ "$depth" =~ ^[0-9]+$ ]] || depth=0
+    if [[ ! "$dcap" =~ ^[0-9]+$ ]]; then echo "max_recursion_depth"; return; fi
+    [[ "$depth" -ge "$dcap" ]] && { echo "max_recursion_depth"; return; }
   fi
   [[ "$iter" -ge "$cap" ]] && { echo "max_iterations"; return; }
   # Use awk -v to pass values to avoid code injection via string interpolation.
@@ -162,4 +177,38 @@ loop_accrue_cost() {
   mkdir -p "$(dirname "$log")" 2>/dev/null || return 0
   jq -nc --argjson d "$delta" --arg lid "$(echo "$state" | jq -r '.loop_id // "loop"')" \
     '{event:"loop_iteration", loop_id:$lid, cost_usd:$d}' >>"$log" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# Ultracode signal (Phase 2 / spec open-question 1)
+# ---------------------------------------------------------------------------
+# Ultracode is a session-scoped risk dial: when on, the loop autonomy ceiling is
+# raised one level above the tier default (capped at bounded-autonomous). It is
+# deliberately NOT persisted in stack-config — it is a per-session opt-in, set by
+# env (CLAUDE_ULTRACODE) or the /ultracode skill's session-state flag.
+# Returns rc 0 when active, rc 1 otherwise. Fail-safe: any error -> inactive.
+loop_ultracode_active() {
+  local v="${CLAUDE_ULTRACODE:-}"
+  case "${v,,}" in
+    1|true|on|yes) return 0 ;;
+  esac
+  local f="${LOOP_STATE_DIR}/ultracode-state.json"
+  if [[ -f "$f" ]]; then
+    [[ "$(jq -r '.active // false' "$f" 2>/dev/null)" == "true" ]] && return 0
+  fi
+  return 1
+}
+
+# Compute the effective autonomy ceiling given the tier ceiling and whether
+# ultracode is active. Ultracode raises one level, capped at bounded-autonomous.
+# Usage: loop_effective_ceiling <tier_ceiling> <true|false>
+loop_effective_ceiling() {
+  local base="${1:-checkpoint}" ultra="${2:-false}"
+  if [[ "$ultra" != "true" ]]; then printf '%s' "$base"; return 0; fi
+  case "$base" in
+    checkpoint)          printf 'bounded-checkpoint' ;;
+    bounded-checkpoint)  printf 'bounded-autonomous' ;;
+    bounded-autonomous)  printf 'bounded-autonomous' ;;   # already at cap
+    *)                   printf '%s' "$base" ;;            # unknown -> identity
+  esac
 }

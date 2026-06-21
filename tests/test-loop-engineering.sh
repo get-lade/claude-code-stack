@@ -509,4 +509,54 @@ out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hoo
 echo "$out" | jq -e '.decision=="block"' >/dev/null 2>&1 && ok "adr020: stop blocks the owning session" || bad "adr020: owning session not blocked out=$out"
 rm -f "$HOME/.claude/session-state/loop-state.sess"*.json
 
+# ============================================================================
+# Phase 2 — residual closures + new guardrails
+# ============================================================================
+
+# --- Task 1: no-progress hash includes untracked-file byte-contents ---
+(
+  _hwd="$(mktemp -d)"; cd "$_hwd" || exit 0
+  git init -q; git config user.email t@t; git config user.name t
+  echo base > tracked; git add tracked; git commit -qm init
+  printf 'one\n' > untracked_u            # untracked, non-ignored
+  h1="$(loop_state_hash "$_hwd")"
+  printf 'two\n' > untracked_u            # same name, different CONTENT, still untracked
+  h2="$(loop_state_hash "$_hwd")"
+  rm -rf "$_hwd"
+  [[ -n "$h1" && "$h1" != "$h2" ]] && echo "ok" || echo "bad h1=$h1 h2=$h2"
+) | { read -r r rest; [[ "$r" == "ok" ]] && ok "hash: untracked content change detected" || bad "hash untracked content $rest"; }
+
+# gitignored files must NOT affect the hash (exclude-standard honored)
+(
+  _hwd="$(mktemp -d)"; cd "$_hwd" || exit 0
+  git init -q; git config user.email t@t; git config user.name t
+  echo "ignored_*" > .gitignore; git add .gitignore; git commit -qm init
+  ha="$(loop_state_hash "$_hwd")"
+  printf 'x\n' > ignored_file
+  hb="$(loop_state_hash "$_hwd")"
+  rm -rf "$_hwd"
+  [[ "$ha" == "$hb" ]] && echo "ok" || echo "bad ha=$ha hb=$hb"
+) | { read -r r rest; [[ "$r" == "ok" ]] && ok "hash: gitignored file ignored" || bad "hash ignored $rest"; }
+
+# --- Task 2: recursion-depth is a hard bound ---
+r="$(loop_check_bounds '{"iteration":1,"recursion_depth":5,"bounds":{"max_iterations":99,"max_recursion_depth":5},"cost_so_far_usd":0,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "max_recursion_depth" ]] && ok "bounds: recursion depth trips" || bad "recursion got=$r"
+r="$(loop_check_bounds '{"iteration":1,"recursion_depth":2,"bounds":{"max_iterations":99,"max_recursion_depth":5},"cost_so_far_usd":0,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "ok" ]] && ok "bounds: recursion depth within ok" || bad "recursion within got=$r"
+# back-compat: state without recursion fields must not trip
+r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":99},"cost_so_far_usd":0,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "ok" ]] && ok "bounds: no recursion fields -> ok" || bad "recursion backcompat got=$r"
+
+# --- Task 3: ultracode signal + ceiling-lift ---
+( unset CLAUDE_ULTRACODE; rm -f "$HOME/.claude/session-state/ultracode-state.json" 2>/dev/null
+  loop_ultracode_active && echo "on" || echo "off" ) | { read -r r; [[ "$r" == "off" ]] && ok "ultracode: default off" || bad "ultracode default $r"; }
+( export CLAUDE_ULTRACODE=1; loop_ultracode_active && echo "on" || echo "off" ) | { read -r r; [[ "$r" == "on" ]] && ok "ultracode: env on" || bad "ultracode env $r"; }
+( mkdir -p "$HOME/.claude/session-state"; echo '{"active":true}' > "$HOME/.claude/session-state/ultracode-state.json"
+  unset CLAUDE_ULTRACODE; loop_ultracode_active && echo "on" || echo "off" ) | { read -r r; [[ "$r" == "on" ]] && ok "ultracode: state on" || bad "ultracode state $r"; }
+rm -f "$HOME/.claude/session-state/ultracode-state.json" 2>/dev/null
+[[ "$(loop_effective_ceiling checkpoint true)"          == "bounded-checkpoint"  ]] && ok "ceiling: checkpoint+1"  || bad "ceiling cp"
+[[ "$(loop_effective_ceiling bounded-checkpoint true)"  == "bounded-autonomous"  ]] && ok "ceiling: bchk+1"       || bad "ceiling bchk"
+[[ "$(loop_effective_ceiling bounded-autonomous true)"  == "bounded-autonomous"  ]] && ok "ceiling: capped"       || bad "ceiling cap"
+[[ "$(loop_effective_ceiling checkpoint false)"         == "checkpoint"          ]] && ok "ceiling: off=identity" || bad "ceiling off"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
