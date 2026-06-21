@@ -241,6 +241,45 @@ loop_runs_record() {
   return 0
 }
 
+# Phase-3 (ADR-022): aggregate loop telemetry from the local loop-runs.jsonl into
+# per-pattern stats. Prints a JSON array (one object per pattern). Empty/no log ->
+# []. Fail-safe. Optional arg overrides the log path (for tests).
+loop_stats() {
+  local log="${1:-${_loop_home}/.claude/logs/loop-runs.jsonl}"
+  [[ -f "$log" ]] || { echo '[]'; return 0; }
+  jq -rs '
+    def pct($p): (sort | if length==0 then 0 else .[ ([(((length * $p) | ceil) - 1), 0] | max) ] end);
+    group_by(.pattern // "unknown")
+    | map({
+        pattern: (.[0].pattern // "unknown"),
+        runs: length,
+        met_pct:              ((map(select(.status=="met"))            | length) * 100 / length),
+        budget_exceeded_pct:  ((map(select(.status=="budget_exceeded"))| length) * 100 / length),
+        iter_cap_pct:         ((map(select(.status=="max_iterations")) | length) * 100 / length),
+        p50_iterations:       ([ .[].iterations // 0 ] | pct(0.50)),
+        p95_iterations:       ([ .[].iterations // 0 ] | pct(0.95)),
+        avg_cost_usd:         (((map(.cost_usd // 0) | add) / length) | (.*1000000|round)/1000000)
+      })
+  ' "$log" 2>/dev/null || echo '[]'
+}
+
+# Propose (print only — never auto-apply) a loop_policy.max_iterations bump per
+# pattern: ceil(p95 * 1.2), floored at the current default. Reads loop_stats.
+# Prints a JSON array of {pattern, observed_p95, proposed_max_iterations}.
+loop_calibrate() {
+  local current="${1:-25}" log="${2:-}"
+  [[ "$current" =~ ^[0-9]+$ ]] || current=25
+  local stats; stats="$(loop_stats "$log")"
+  echo "$stats" | jq -c --argjson cur "$current" '
+    map({
+      pattern: .pattern,
+      runs: .runs,
+      observed_p95: .p95_iterations,
+      proposed_max_iterations: ([ ($cur), (((.p95_iterations * 1.2) | ceil)) ] | max)
+    })
+  ' 2>/dev/null || echo '[]'
+}
+
 # Phase-3 (ADR-022): convert token usage to USD via the single audited price
 # table (config/model-routing.json -> providers.*.models[id].pricing_per_million_*).
 # Usage: loop_cost_from_usage <input_tokens> <output_tokens> [model_id]

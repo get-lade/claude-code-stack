@@ -717,4 +717,33 @@ out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$REPO_ROOT/hooks/loop-
 unset LOOP_PRICE_TABLE
 : > "$HOME/.claude/logs/subagent-runs.jsonl"
 
+# --- T1: telemetry feedback (loop_stats + loop_calibrate + /loop-review) ---
+[[ -f "$REPO_ROOT/skills/loop-review/SKILL.md" ]] && ok "loop-review: skill present" || bad "loop-review: missing"
+# empty history -> []
+STATLOG="$(mktemp)"; : > "$STATLOG"
+[[ "$(loop_stats "$STATLOG")" == "[]" ]] && ok "stats: empty -> []" || bad "stats empty"
+# seed: pattern ralph x3 (iterations 4,6,20; one budget_exceeded, one met, one max_iterations)
+printf '%s\n' \
+  '{"loop_id":"a","pattern":"ralph","status":"met","iterations":4,"cost_usd":1}' \
+  '{"loop_id":"b","pattern":"ralph","status":"budget_exceeded","iterations":6,"cost_usd":5}' \
+  '{"loop_id":"c","pattern":"ralph","status":"max_iterations","iterations":20,"cost_usd":2}' \
+  '{"loop_id":"d","pattern":"eval-driven","status":"met","iterations":2,"cost_usd":1}' \
+  >> "$STATLOG"
+ST="$(loop_stats "$STATLOG")"
+[[ "$(echo "$ST" | jq -r 'length')" == "2" ]] && ok "stats: groups by pattern" || bad "stats groups=$(echo "$ST" | jq -r 'length')"
+[[ "$(echo "$ST" | jq -r '.[] | select(.pattern=="ralph") | .runs')" == "3" ]] && ok "stats: ralph runs=3" || bad "stats ralph runs"
+p95="$(echo "$ST" | jq -r '.[] | select(.pattern=="ralph") | .p95_iterations')"
+[[ "$p95" == "20" ]] && ok "stats: p95 iterations" || bad "stats p95=$p95"
+# calibrate: proposed >= ceil(p95*1.2)=24, and >= current(25) -> 25
+CAL="$(loop_calibrate 25 "$STATLOG")"
+prop="$(echo "$CAL" | jq -r '.[] | select(.pattern=="ralph") | .proposed_max_iterations')"
+[[ "$prop" == "25" ]] && ok "calibrate: floored at current" || bad "calibrate prop=$prop"
+# with low current, proposed tracks p95*1.2 -> ceil(24)=24
+CAL2="$(loop_calibrate 5 "$STATLOG")"
+prop2="$(echo "$CAL2" | jq -r '.[] | select(.pattern=="ralph") | .proposed_max_iterations')"
+[[ "$prop2" == "24" ]] && ok "calibrate: tracks p95*1.2" || bad "calibrate prop2=$prop2"
+# calibrate never writes stack-config (pure function — just verify it returns JSON)
+echo "$CAL" | jq -e 'type=="array"' >/dev/null 2>&1 && ok "calibrate: returns array (no side effects)" || bad "calibrate type"
+rm -f "$STATLOG"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
