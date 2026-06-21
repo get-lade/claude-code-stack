@@ -103,3 +103,19 @@ Print the path to the plan + the recommended approach in one line. End with:
 > "Type 'proceed' to implement, or tell me what to change."
 
 Do NOT start implementing. Do NOT background it. Wait for the word.
+
+### 8. On approval — clear the design-before-code gate (ADR-021)
+
+When the user approves (says "proceed" or equivalent), write the approval marker
+the design gate reads, so subsequent source edits are unblocked under ultracode:
+
+```bash
+mkdir -p ~/.claude/session-state
+printf '{"active":true,"approved_at":"%s","plan":"%s"}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "<plan-path>" \
+  > ~/.claude/session-state/design-approved.json
+```
+
+This is a no-op when ultracode is off (the gate is inactive then). It is the
+authoring path that satisfies `hooks/design-gate.sh` — `/plan` writes the marker,
+the gate enforces it.

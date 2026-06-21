@@ -77,6 +77,15 @@
             "command": "~/.claude/hooks/workflow-roster-check.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/design-gate.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

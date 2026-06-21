@@ -613,4 +613,38 @@ LRLOG="$HOME/.claude/logs/loop-runs.jsonl"
 loop_runs_record "" ; [[ $? -eq 0 ]] && ok "telemetry: empty arg no-op" || bad "telemetry empty arg"
 rm -f "$LRLOG" 2>/dev/null
 
+# --- Task 6: ADR-021 design-before-code gate ---
+GATE="$REPO_ROOT/hooks/design-gate.sh"
+[[ -x "$GATE" ]] && ok "gate: hook executable" || bad "gate: not executable"
+run_gate() { LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$GATE" <<< "$1"; }
+mkdir -p "$HOME/.claude/session-state"
+rm -f "$HOME/.claude/session-state/design-approved.json" 2>/dev/null
+
+# ultracode OFF -> always allow, even on a source file with no marker
+( unset CLAUDE_ULTRACODE
+  out="$(run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+  [[ -z "$out" ]] && echo ok || echo "bad:$out" ) | { read -r r; [[ "$r" == "ok" ]] && ok "gate: ultracode off -> allow" || bad "gate off $r"; }
+
+# ultracode ON + source file + no marker -> deny
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "gate: ultracode on + source -> deny" || bad "gate deny out=$out"
+
+# ultracode ON + docs target -> allow (must be able to write the spec)
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"docs/superpowers/specs/x.md"}}')"
+[[ -z "$out" ]] && ok "gate: docs always allowed" || bad "gate docs out=$out"
+
+# ultracode ON + tests target -> allow
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"tests/test-x.sh"}}')"
+[[ -z "$out" ]] && ok "gate: tests always allowed" || bad "gate tests out=$out"
+
+# ultracode ON + markdown (non-source) -> allow
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"README.md"}}')"
+[[ -z "$out" ]] && ok "gate: markdown allowed" || bad "gate md out=$out"
+
+# ultracode ON + source + approved marker -> allow
+echo '{"active":true}' > "$HOME/.claude/session-state/design-approved.json"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+[[ -z "$out" ]] && ok "gate: approved marker -> allow" || bad "gate marker out=$out"
+rm -f "$HOME/.claude/session-state/design-approved.json"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
