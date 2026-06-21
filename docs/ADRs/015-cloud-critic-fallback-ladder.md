@@ -1,6 +1,7 @@
 # ADR 015: External-model critics fall back to env-key/API in cloud instead of STOPping
 
 **Status:** Accepted (amends ADR-011 and ADR-012)
+**Amended by:** ADR-022 — rung 3's literal STOP is replaced, for the *structurally-gated* case (key present but `api.openai.com` denied by the network policy / sandbox classifier, which an in-session `settings.local.json` edit cannot fix), by a preflight probe + a labeled Claude-only deviation + a structured decision handback. STOP survives only as the blocking recommendation for novel crypto/auth.
 **Date:** 2026-06-16
 **Author:** the maintainer + Claude (Opus 4.8)
 

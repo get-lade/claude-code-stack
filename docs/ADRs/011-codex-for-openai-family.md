@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Amended by:** ADR-015 — in cloud, "Codex CLI unavailable → STOP" now applies only when **both** the `codex` CLI and `OPENAI_API_KEY` are absent; otherwise the agent reaches GPT-5.5 via the env key (ad-hoc install or direct API).
+**Amended by:** ADR-022 — agents run a preflight probe FIRST; when the path is *structurally* blocked (key not in the subagent shell, or `api.openai.com` denied by the network policy / sandbox classifier), they emit a labeled Claude-only DEVIATION + a structured decision instead of dead-stopping. The literal STOP survives only as the *blocking* recommendation for novel crypto/auth with no prior cross-family review.
 **Date:** 2026-05-16
 **Author:** the maintainer + Claude (during Session 4 — Tier 2 install)
 
