@@ -90,9 +90,15 @@ _LOOP_ID="$(echo "$STATE" | jq -r '.loop_id // empty' 2>/dev/null)"
 _STARTED="$(echo "$STATE" | jq -r '.started_at // empty' 2>/dev/null)"
 _LOG="${HOME:-/tmp}/.claude/logs/subagent-runs.jsonl"
 _ITER_COST=0
+# Whether _ITER_COST is a since-start cumulative total (real log read) or a
+# single-iteration delta (the no-log estimate). Cumulative totals REPLACE the
+# prior value; per-iteration estimates ACCUMULATE onto it. Mixing the two is the
+# old double-count bug (cumulative summed onto an already-cumulative prior).
+_ITER_CUMULATIVE=true
 if [[ -f "$_LOG" && -n "$_LOOP_ID" ]]; then
   # Filter by loop_id; if started_at is present, also filter by ts >= started_at.
   # Rows that lack a ts field are included (conservative: they might belong here).
+  # This sum is cumulative-since-start, not a per-iteration delta.
   _ITER_COST="$(jq -rs --arg lid "$_LOOP_ID" --arg s "$_STARTED" \
     '[.[] |
       select(.event=="loop_iteration") |
@@ -106,19 +112,30 @@ elif [[ -f "$_LOG" ]]; then
   # No loop_id in state — contribute 0 to avoid cross-loop contamination.
   _ITER_COST=0
 else
+  # No log at all — fall back to a per-iteration estimate that accumulates.
   _ITER_COST="${LOOP_EST_COST_PER_ITER:-0}"
+  _ITER_CUMULATIVE=false
 fi
 # Update cost_so_far_usd in state (keep honest: zero when no data).
 _PREV_COST="$(echo "$STATE" | jq -r '.cost_so_far_usd // 0' 2>/dev/null)"
 [[ "$_PREV_COST" =~ ^[0-9]+(\.[0-9]+)?$ ]] || _PREV_COST=0
-_NEW_COST="$(awk -v a="$_ITER_COST" -v b="$_PREV_COST" 'BEGIN{printf "%.6f", a+b}' 2>/dev/null)" || _NEW_COST="$_PREV_COST"
+if [[ "$_ITER_CUMULATIVE" == true ]]; then
+  # Cumulative total: replace, never add (adding double-counts prior iterations).
+  _NEW_COST="$_ITER_COST"
+else
+  # Per-iteration estimate: accumulate onto the prior total.
+  _NEW_COST="$(awk -v a="$_ITER_COST" -v b="$_PREV_COST" 'BEGIN{printf "%.6f", a+b}' 2>/dev/null)" || _NEW_COST="$_PREV_COST"
+fi
 # ADR-024: fold in real per-tool spend (loop_tool_cost rows accrued by
 # loop-cost-accrual.sh) so the budget bound below is a TRUE hard cap, not just a
 # loop_iteration estimate. loop_live_cost is a total-since-start over all
-# loop-tagged cost rows, so take the max — never additive — to avoid double count.
+# loop-tagged cost rows. Take the max over {new, live, prev} — never additive — so
+# the figure is monotonic non-decreasing without double-counting any source.
 _LIVE_COST="$(loop_live_cost "$_LOOP_ID" "$_STARTED" 2>/dev/null || echo 0)"
 [[ "$_LIVE_COST" =~ ^[0-9]+(\.[0-9]+)?$ ]] || _LIVE_COST=0
-awk -v a="$_NEW_COST" -v b="$_LIVE_COST" 'BEGIN{exit !(b>a)}' && _NEW_COST="$_LIVE_COST"
+for _c in "$_LIVE_COST" "$_PREV_COST"; do
+  awk -v a="$_NEW_COST" -v b="$_c" 'BEGIN{exit !(b>a)}' && _NEW_COST="$_c"
+done
 STATE="$(echo "$STATE" | jq -c --argjson c "$_NEW_COST" '.cost_so_far_usd=$c' 2>/dev/null)" || true
 
 # 3) Advance iteration + hash, then check bounds on the advanced state.
