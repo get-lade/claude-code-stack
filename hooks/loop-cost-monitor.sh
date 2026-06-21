@@ -37,6 +37,18 @@ STARTED="$(echo "$STATE" | jq -r '.started_at // empty' 2>/dev/null)"
 TOTAL="$(loop_live_cost "$LID" "$STARTED" 2>/dev/null || echo 0)"
 [[ "$TOTAL" =~ ^[0-9]+(\.[0-9]+)?$ ]] || exit 0
 
+# Phase-3 (ADR-022): best-effort real token signal. If this tool-call payload
+# carries usage, convert to USD and add it to the logged-row sum so a costly call
+# is caught immediately, not one log row later. Absent usage -> logged sum only.
+INPUT_RAW="$(cat 2>/dev/null || echo '{}')"
+_IN="$(echo "$INPUT_RAW"  | jq -r '(.tool_response.usage.input_tokens  // .usage.input_tokens  // 0)' 2>/dev/null)"
+_OUT="$(echo "$INPUT_RAW" | jq -r '(.tool_response.usage.output_tokens // .usage.output_tokens // 0)' 2>/dev/null)"
+_MODEL="$(echo "$INPUT_RAW" | jq -r '(.model // .tool_response.model // "claude-opus-4-8")' 2>/dev/null)"
+if [[ "$_IN" =~ ^[0-9]+$ && "$_OUT" =~ ^[0-9]+$ ]] && [[ "$_IN" != "0" || "$_OUT" != "0" ]]; then
+  _LIVE="$(loop_cost_from_usage "$_IN" "$_OUT" "$_MODEL" 2>/dev/null || echo 0)"
+  [[ "$_LIVE" =~ ^[0-9]+(\.[0-9]+)?$ ]] && TOTAL="$(awk -v a="$TOTAL" -v b="$_LIVE" 'BEGIN{printf "%.6f", a+b}' 2>/dev/null || echo "$TOTAL")"
+fi
+
 # Over (or at) budget? -> deny + mark budget_exceeded so the loop ends cleanly.
 if awk -v t="$TOTAL" -v b="$BUDGET" 'BEGIN{exit !(t >= b)}'; then
   loop_write_state "$(echo "$STATE" | jq -c --argjson t "$TOTAL" \

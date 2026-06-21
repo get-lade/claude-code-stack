@@ -693,4 +693,28 @@ out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/other/x.s
 [[ -z "$out" ]] && ok "gate(p3): empty approved_paths = session-wide" || bad "gate(p3) empty out=$out"
 rm -f "$MK"
 
+# --- T2: real token-cost signal ---
+export LOOP_PRICE_TABLE="$REPO_ROOT/config/model-routing.json"
+# opus 4.8: $5/Mtok in, $25/Mtok out. 200k in + 100k out = 1.0 + 2.5 = 3.5
+c="$(loop_cost_from_usage 200000 100000 claude-opus-4-8)"
+awk -v v="$c" 'BEGIN{exit !(v>3.49 && v<3.51)}' && ok "cost_from_usage: opus priced" || bad "cost_from_usage got=$c"
+# unknown model -> 0 (fail-safe)
+c="$(loop_cost_from_usage 1000 1000 no-such-model)"
+awk -v v="$c" 'BEGIN{exit !(v==0)}' && ok "cost_from_usage: unknown model -> 0" || bad "cost_from_usage unknown=$c"
+# zero tokens -> 0
+c="$(loop_cost_from_usage 0 0 claude-opus-4-8)"
+awk -v v="$c" 'BEGIN{exit !(v==0)}' && ok "cost_from_usage: zero -> 0" || bad "cost_from_usage zero=$c"
+
+# monitor: usage payload pushes over budget -> deny (logged sum 0 + live 3.5 >= 3)
+mkdir -p "$HOME/.claude/logs"; : > "$HOME/.claude/logs/subagent-runs.jsonl"
+loop_write_state '{"active":true,"loop_id":"LIVE1","bounds":{"per_run_budget_usd":3,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" LOOP_PRICE_TABLE="$LOOP_PRICE_TABLE" bash "$REPO_ROOT/hooks/loop-cost-monitor.sh" <<< '{"tool_name":"Agent","model":"claude-opus-4-8","tool_response":{"usage":{"input_tokens":200000,"output_tokens":100000}}}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "monitor(p3): usage signal trips budget" || bad "monitor(p3) usage out=$out"
+# monitor: no usage + empty log + under budget -> allow
+loop_write_state '{"active":true,"loop_id":"LIVE2","bounds":{"per_run_budget_usd":100,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$REPO_ROOT/hooks/loop-cost-monitor.sh" <<< '{"tool_name":"Bash"}')"
+[[ -z "$out" ]] && ok "monitor(p3): no usage + under budget -> allow" || bad "monitor(p3) allow out=$out"
+unset LOOP_PRICE_TABLE
+: > "$HOME/.claude/logs/subagent-runs.jsonl"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

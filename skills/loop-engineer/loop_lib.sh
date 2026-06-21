@@ -241,6 +241,33 @@ loop_runs_record() {
   return 0
 }
 
+# Phase-3 (ADR-022): convert token usage to USD via the single audited price
+# table (config/model-routing.json -> providers.*.models[id].pricing_per_million_*).
+# Usage: loop_cost_from_usage <input_tokens> <output_tokens> [model_id]
+# Prints a USD number (0 on any error / unknown model). Fail-safe.
+loop_cost_from_usage() {
+  local in_tok="${1:-0}" out_tok="${2:-0}" model="${3:-claude-opus-4-8}"
+  [[ "$in_tok"  =~ ^[0-9]+$ ]] || in_tok=0
+  [[ "$out_tok" =~ ^[0-9]+$ ]] || out_tok=0
+  # Resolve the price table: explicit override, then installed, then repo-relative.
+  local pt="${LOOP_PRICE_TABLE:-}"
+  if [[ -z "$pt" ]]; then
+    if [[ -f "${_loop_home}/.claude/config/model-routing.json" ]]; then
+      pt="${_loop_home}/.claude/config/model-routing.json"
+    else
+      local _here; _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+      [[ -f "${_here}/../../config/model-routing.json" ]] && pt="${_here}/../../config/model-routing.json"
+    fi
+  fi
+  [[ -z "$pt" || ! -f "$pt" ]] && { echo 0; return 0; }
+  jq -rn --slurpfile t "$pt" --arg m "$model" --argjson i "$in_tok" --argjson o "$out_tok" '
+    ([ ($t[0].providers // {})[] | .models? // {} ] | add // {}) as $models
+    | ($models[$m] // {}) as $mdl
+    | ( (($mdl.pricing_per_million_input  // 0) * $i / 1000000)
+      + (($mdl.pricing_per_million_output // 0) * $o / 1000000) )
+  ' 2>/dev/null || echo 0
+}
+
 # Phase-3 (spec §6.7): durable corrections. When a loop exits without meeting its
 # goal (no_progress / escalated / a bound trip), append a structured note so the
 # lesson compounds — /handoff folds unresolved corrections into the next session.
