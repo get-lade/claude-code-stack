@@ -738,11 +738,14 @@ out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.s
 [[ -z "$out" ]] && ok "gate(sess): session A marker allows A" || bad "gate(sess) A out=$out"
 out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"},"session_id":"SB"}')"
 echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "gate(sess): A marker does not leak to B" || bad "gate(sess) B-leak out=$out"
-# legacy unscoped marker still works when no per-session file exists (back-compat)
+# legacy unscoped marker is honored ONLY when no session id resolves (back-compat)
 rm -f "$SS"/design-approved*.json
 echo '{"active":true}' > "$SS/design-approved.json"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+[[ -z "$out" ]] && ok "gate(sess): legacy unscoped marker = fallback (no sid)" || bad "gate(sess) legacy out=$out"
+# a resolved session id must NOT fall back to the shared global marker (no leak)
 out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"},"session_id":"SC"}')"
-[[ -z "$out" ]] && ok "gate(sess): legacy unscoped marker = fallback" || bad "gate(sess) legacy out=$out"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "gate(sess): global marker does not leak to a sid session" || bad "gate(sess) global-leak out=$out"
 # per-session file takes precedence over legacy when both exist
 rm -f "$SS"/design-approved*.json
 echo '{"active":true}' > "$SS/design-approved.json"

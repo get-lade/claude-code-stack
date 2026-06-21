@@ -51,14 +51,22 @@ esac
 STATE_DIR="${LOOP_STATE_DIR:-${HOME:-/tmp}/.claude/session-state}"
 # Marker is per-session (ADR-020 pattern): concurrent sessions must not clobber
 # each other's approval through one shared file. Resolve the session id from the
-# hook payload (fallback to the in-session env), sanitize it for use in a filename
-# (blocks path traversal), and prefer the per-session marker; fall back to the
-# legacy unscoped file for back-compat.
+# hook payload (fallback to the in-session env) and sanitize it for use in a
+# filename (blocks path traversal).
+#
+# When a session id resolves, the per-session marker is authoritative and the
+# shared unscoped file is NOT consulted — otherwise one session's global approval
+# would leak into another that never approved anything. The legacy unscoped file
+# is honored only when no session id is resolvable (back-compat for markers
+# written before per-session scoping, and for runtimes that pass no session_id).
 _SID="$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)"
 [[ -z "$_SID" ]] && _SID="${CLAUDE_CODE_SESSION_ID:-}"
 _SID="${_SID//[^A-Za-z0-9._-]/_}"
-MARKER="$STATE_DIR/design-approved.json"
-[[ -n "$_SID" && -f "$STATE_DIR/design-approved.$_SID.json" ]] && MARKER="$STATE_DIR/design-approved.$_SID.json"
+if [[ -n "$_SID" ]]; then
+  MARKER="$STATE_DIR/design-approved.$_SID.json"
+else
+  MARKER="$STATE_DIR/design-approved.json"
+fi
 if [[ -f "$MARKER" ]] && [[ "$(jq -r '.active // false' "$MARKER" 2>/dev/null)" == "true" ]]; then
   _NPATHS="$(jq -r '(.approved_paths // []) | length' "$MARKER" 2>/dev/null)"
   if [[ -z "$_NPATHS" || "$_NPATHS" == "0" ]]; then
