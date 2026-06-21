@@ -114,11 +114,17 @@ stays precise — only the planned files unlock, not all source:
 
 ```bash
 mkdir -p ~/.claude/session-state
+# Per-session marker (ADR-020 pattern): two live sessions must not clobber one
+# shared approval file. Key the filename by the (sanitized) session id; the gate
+# reads design-approved.<sid>.json for this session, else the legacy file.
+SID="${CLAUDE_CODE_SESSION_ID:-}"; SID="${SID//[^A-Za-z0-9._-]/_}"
+FILE=~/.claude/session-state/design-approved.json
+[[ -n "$SID" ]] && FILE=~/.claude/session-state/design-approved."$SID".json
 # approved_paths = shell globs for the files/dirs this plan covers.
 jq -n --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg plan "<plan-path>" \
   --argjson paths '["<glob1>","<glob2>"]' \
   '{active:true, approved_at:$at, plan:$plan, approved_paths:$paths}' \
-  > ~/.claude/session-state/design-approved.json
+  > "$FILE"
 ```
 
 If you cannot enumerate paths, write `approved_paths: []` (or omit it) for a

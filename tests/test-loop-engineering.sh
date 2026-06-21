@@ -730,6 +730,27 @@ out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/other/x.s
 [[ -z "$out" ]] && ok "gate(p3): empty approved_paths = session-wide" || bad "gate(p3) empty out=$out"
 rm -f "$MK"
 
+# --- design-gate marker is per-session (ADR-020 pattern; clobber isolation) ---
+SS="$HOME/.claude/session-state"; mkdir -p "$SS"; rm -f "$SS"/design-approved*.json
+# session A has an approved marker; B has none -> A's approval must NOT leak to B
+echo '{"active":true}' > "$SS/design-approved.SA.json"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"},"session_id":"SA"}')"
+[[ -z "$out" ]] && ok "gate(sess): session A marker allows A" || bad "gate(sess) A out=$out"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"},"session_id":"SB"}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "gate(sess): A marker does not leak to B" || bad "gate(sess) B-leak out=$out"
+# legacy unscoped marker still works when no per-session file exists (back-compat)
+rm -f "$SS"/design-approved*.json
+echo '{"active":true}' > "$SS/design-approved.json"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"},"session_id":"SC"}')"
+[[ -z "$out" ]] && ok "gate(sess): legacy unscoped marker = fallback" || bad "gate(sess) legacy out=$out"
+# per-session file takes precedence over legacy when both exist
+rm -f "$SS"/design-approved*.json
+echo '{"active":true}' > "$SS/design-approved.json"
+echo '{"active":true,"approved_paths":["skills/only/**"]}' > "$SS/design-approved.SD.json"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"},"session_id":"SD"}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "gate(sess): per-session marker overrides legacy" || bad "gate(sess) precedence out=$out"
+rm -f "$SS"/design-approved*.json
+
 # --- T2: real token-cost signal ---
 export LOOP_PRICE_TABLE="$REPO_ROOT/config/model-routing.json"
 # opus 4.8: $5/Mtok in, $25/Mtok out. 200k in + 100k out = 1.0 + 2.5 = 3.5
