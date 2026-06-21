@@ -32,6 +32,19 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/irreversible-deny.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/schema-deploy-gate.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__(apply_migration|execute_sql|deploy_edge_function)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/schema-deploy-gate.sh"
           }
         ]
       },
@@ -41,6 +54,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/subagent-log.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/override-log.sh"
           }
         ]
       },

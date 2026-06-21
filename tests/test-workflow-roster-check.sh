@@ -326,6 +326,63 @@ else
 fi
 TIER2_INVOCATIONS=$((TIER2_INVOCATIONS+1))
 
+# ─── C12: saved-name workflow treated as write-heavy worst-case (FIX #4) ──────
+# A saved-name workflow has no inspectable body (SCRIPT empty). In block mode it
+# must be denied, not waved through.
+REPO12="$TMP/repo-c12"
+make_repo "$REPO12" 2 '"workflow_roster":"block"'
+
+run_hook_name() {
+  local cwd="$1"
+  local name="$2"
+  jq -nc --arg n "$name" --arg c "$cwd" '{"tool_input":{"name":$n},"cwd":$c}' \
+    | bash "$HOOK" 2>/dev/null
+}
+
+OUT12=$(run_hook_name "$REPO12" "my-saved-workflow")
+if echo "$OUT12" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null 2>&1; then
+  pass "C12: saved-name workflow denied in block mode (FIX #4)"
+else
+  fail "C12: expected deny for saved-name in block mode; got: $OUT12"
+fi
+ROW12=$(last_log_row)
+if echo "$ROW12" | jq -e '.script_source == "name" and .write_heavy == true and .decision == "deny"' > /dev/null 2>&1; then
+  pass "C12: row script_source==name, write_heavy==true, decision==deny"
+else
+  fail "C12: row wrong; row: $ROW12"
+fi
+TIER2_INVOCATIONS=$((TIER2_INVOCATIONS+1))
+
+# ─── C13: saved-name workflow warns in warn mode (FIX #4) ─────────────────────
+REPO13="$TMP/repo-c13"
+make_repo "$REPO13" 2
+OUT13=$(run_hook_name "$REPO13" "my-saved-workflow")
+if echo "$OUT13" | jq -e '.hookSpecificOutput.permissionDecision == "allow"' > /dev/null 2>&1; then
+  pass "C13: saved-name workflow warns (allow+reminder) in warn mode"
+else
+  fail "C13: expected warn/allow for saved-name in warn mode; got: $OUT13"
+fi
+ROW13=$(last_log_row)
+if echo "$ROW13" | jq -e '.decision == "warn" and .write_heavy == true' > /dev/null 2>&1; then
+  pass "C13: row decision==warn, write_heavy==true"
+else
+  fail "C13: row wrong; row: $ROW13"
+fi
+TIER2_INVOCATIONS=$((TIER2_INVOCATIONS+1))
+
+# ─── C14: broadened write verbs (grant/revoke/drop/alter table/deploy/push) ───
+REPO14="$TMP/repo-c14"
+make_repo "$REPO14" 2 '"workflow_roster":"block"'
+for verb in "grant select on" "revoke usage" "drop the index" "alter table users" "deploy the function" "push the branch"; do
+  OUT14=$(run_hook "$REPO14" "$verb to finish the job")
+  if echo "$OUT14" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null 2>&1; then
+    pass "C14: write verb '$verb' triggers block-mode deny"
+  else
+    fail "C14: write verb '$verb' did NOT trigger deny; got: $OUT14"
+  fi
+  TIER2_INVOCATIONS=$((TIER2_INVOCATIONS+1))
+done
+
 # ─── C6: log count matches running Tier>=2 invocation counter ─────────────────
 TOTAL=$(log_row_count)
 if [[ "$TOTAL" -eq "$TIER2_INVOCATIONS" ]]; then

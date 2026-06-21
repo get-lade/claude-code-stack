@@ -80,7 +80,15 @@ fi
 
 # Does the workflow write to the tree (worktree isolation, or build/edit verbs)?
 WRITE_HEAVY=0
-if echo "$SCRIPT" | grep -qiE "isolation['\"[:space:]]*[:=]['\"[:space:]]*worktree|\b(implement|refactor|scaffold|migrat|build the|edit |write the|apply the fix|create .*file)\b"; then
+if echo "$SCRIPT" | grep -qiE "isolation['\"[:space:]]*[:=]['\"[:space:]]*worktree|\b(implement|refactor|scaffold|migrat|build the|edit |write the|apply the fix|create .*file|grant|revoke|drop|alter table|deploy|push)\b"; then
+  WRITE_HEAVY=1
+fi
+
+# Saved-name workflows can't be inspected (body not available at hook time), so
+# SCRIPT is empty and the write-verb scan above can never fire. Treat them as
+# worst-case: an un-inspectable saved workflow should be denied in block mode
+# rather than waved through. ADR-007 follow-up #4.
+if [[ "$SCRIPT_SOURCE" == "name" ]]; then
   WRITE_HEAVY=1
 fi
 
