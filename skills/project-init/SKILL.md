@@ -323,10 +323,13 @@ don't need a project-level ignore.)
 > the ignore block now, track the consolidation separately.
 
 **Offer session preferences.** Once, before suggesting the commit:
-> "Set communication / working preferences now (style, effort, verbosity)? [y/N]"
+> "Set communication / working preferences now (style, effort, verbosity, governed-loop autonomy)? [y/N]"
 - If yes: run the `/session` skill. Its "save as **project** default" writes the
-  choices into this project's `stack-config.json` `session_prefs`.
-- If no: continue — defaults apply, and `/session` can be run anytime.
+  choices (incl. `loop_policy.default_autonomy` and the loop-onboarded marker)
+  into this project's `stack-config.json`.
+- If no: continue — defaults apply, and `/session` can be run anytime. (The
+  `loop-shape-nudge.sh` hook will still offer loop setup on the first
+  iterate-until-done request.)
 
 **Offer the automation recommender.** Once, before suggesting the commit:
 > "Scan this repo and recommend Claude Code automations (hooks, subagents, MCP servers)? [y/N]"

@@ -17,6 +17,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/dispatch-nudge.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/loop-shape-nudge.sh"
           }
         ]
       }
@@ -32,6 +36,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/irreversible-deny.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/loop-cost-monitor.sh"
           },
           {
             "type": "command",
@@ -58,6 +66,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/override-log.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/loop-cost-monitor.sh"
           }
         ]
       },
@@ -67,6 +79,15 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/workflow-roster-check.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/design-gate.sh"
           }
         ]
       }

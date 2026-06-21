@@ -1,6 +1,6 @@
 # Design Spec — Loop-Engineering Control Plane
 
-**Status:** Proposed (precursor to ADR-019; sibling ADR-020 for the superpowers gate)
+**Status:** Accepted — Phase 1 (ADR-019, PR #37) and **Phase 2 (PR #42)** shipped; the superpowers design-before-code gate landed as **ADR-021** (renumbered from ADR-020, which became per-session loop-state)
 **Version:** v2 (folds adversarial review `w1kckn9h3` — grounding + quality fixes)
 **Intent:** **Flagship capability** — a deliberate stack investment, not a measured-need utility. Cost-justification does not gate it; instrumentation runs *alongside*, not first.
 **Date:** 2026-06-20
@@ -142,19 +142,33 @@ Pre-flight gate + Stop-hook enforce:
 - **`max_recursion_depth` is advisory in Phase 1.** The runtime does not enforce fan-out/recursion depth; `max_iterations` is the hard cap. Phase 2 will enforce this.
 - **No-progress hash omits untracked-file contents (Phase 2).** The state hash covers `git diff HEAD`, tracked-file names via `git status --porcelain`, and HEAD SHA. It does NOT hash the byte-contents of untracked files — only their names appear in the porcelain output. A loop that only modifies untracked-file content without adding them to git will not be detected as making progress. Phase 2 will extend the hash to include untracked-file contents.
 
-## 10. Sibling — ADR-020 (superpowers gate, separate spec)
+## 10. Sibling — ADR-021 (superpowers gate) — SHIPPED
 
-Reuses the §3 governance-hooks base. Summary: vendor `using-superpowers` (Tier 0/1) + brainstorming's text core (drop the visual-companion Node server); a PreToolUse `Edit|Write` `deny`-until-spec-exists gate, tier + ultracode gated; reconcile with `/plan` **[S]** (replace / wrap / mode — decide in ADR-020).
+Reuses the §3 governance-hooks base. **Shipped as ADR-021** (`hooks/design-gate.sh`,
+PR #42): a PreToolUse `Edit|Write` deny-until-approved-design gate, **ultracode-gated
+(off by default)**, source-only (docs/tests/config always editable). Reconciliation
+with `/plan` (open question 2): the gate **wraps** `/plan` — `/plan` writes the
+`design-approved.json` marker on approval, the gate enforces it. (The `using-superpowers`
+/ brainstorming vendoring is tracked separately and out of scope for ADR-021's gate.)
 
 ## 11. Phasing (flagship — instrument alongside, not first)
 
 - **Phase 1:** `/loop-engineer` + pre-flight gate + Stop-hook + `irreversible-deny` + `loop_policy` (schema-migrated) + foreman routing + guardrails 1–8 + **per-run loop cost logging to `subagent-runs.jsonl` (instrument alongside)**. Vendored; cloud-compatible. **Phase 1 residuals (stated, not hidden):** (a) `irreversible-deny` is best-effort defense-in-depth with known bypasses (see §9); (b) cost accrual is advisory and between-iteration — `cost_so_far_usd` accrues from real log data scoped to this loop's id, but a within-iteration runaway is not halted until Phase 2; (c) `max_recursion_depth` is advisory — not runtime-enforced in Phase 1, `max_iterations` is the hard cap; (d) no-progress hash omits untracked-file byte-contents — only filenames appear in the hash (Phase-2 fix).
-- **Phase 2:** Supabase `loop_runs` (Tier 3+) + **live mid-flight cost monitor** (closes the within-iteration gap) + telemetry + the ultracode signal + (optional) effort-enum widening.
+- **Phase 3 (SHIPPED — PR #42, ADR-023):** telemetry feedback loop (`/loop-review`,
+  `loop_stats`/`loop_calibrate` — advisory, never auto-applies); real token-cost
+  signal in the live monitor (`loop_cost_from_usage` via `model-routing.json`);
+  per-path design-gate marker (`approved_paths`); 5-point `model_effort` enum
+  (legacy subset); vendored `using-superpowers` + `brainstorming` (text core);
+  durable corrections (`loop_record_correction` → `/handoff`); and
+  auto-enablement (`loop-shape-nudge.sh` → one-time onboarding, `/session` +
+  `/project-init` defaults). Out of scope: ToT/GoT patterns; brainstorming visual
+  server.
+- **Phase 2 (SHIPPED — PR #42):** Supabase `loop_runs` (Tier 3+, `schemas/004-loop-runs.sql`) + **live mid-flight cost monitor** (`hooks/loop-cost-monitor.sh`, closes the within-iteration gap) + telemetry (`loop_runs_record`, local JSONL always + Supabase when creds present) + the ultracode signal (`loop_ultracode_active`/`loop_effective_ceiling`/`/ultracode`). Also closed the Phase-1 residuals: `max_recursion_depth` is now a hard bound, and the no-progress hash folds untracked-file byte-contents. Deferred: 5-point effort-enum widening (kept `fast/balanced/max` per §3 open question). The design-before-code gate shipped separately as **ADR-021** (`hooks/design-gate.sh`).
 
 ## 12. Open questions
 
-1. **Ultracode signal** — absent from the stack (grep: zero). Define a config flag + detection (needed by ADR-019 ceiling-lift and ADR-020 gate).
-2. **`/plan` vs brainstorming** reconciliation (ADR-020).
+1. ~~**Ultracode signal**~~ — RESOLVED (PR #42): session-scoped signal via env `CLAUDE_ULTRACODE` or the `/ultracode` session-state flag; `loop_ultracode_active` + `loop_effective_ceiling` (+1 ceiling, capped `bounded-autonomous`). Not persisted in stack-config (per-session opt-in).
+2. ~~**`/plan` vs brainstorming** reconciliation~~ — RESOLVED for the gate (ADR-021): the design-gate **wraps** `/plan`; `/plan` writes the `design-approved.json` marker the gate reads. (Brainstorming vendoring remains separate.)
 3. **Effort enum** — keep `fast/balanced/max`, or widen to 5-point (touches ADR-018 dashboard)? Defaulting to keep.
 4. **Pattern provenance** — which `[P]` targets (ralph-loop, worktree-fanout) to *vendor* vs leave as graceful-degrade dependencies.
 

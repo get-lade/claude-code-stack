@@ -509,4 +509,299 @@ out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hoo
 echo "$out" | jq -e '.decision=="block"' >/dev/null 2>&1 && ok "adr020: stop blocks the owning session" || bad "adr020: owning session not blocked out=$out"
 rm -f "$HOME/.claude/session-state/loop-state.sess"*.json
 
+# ============================================================================
+# Phase 2 — residual closures + new guardrails
+# ============================================================================
+
+# --- Task 1: no-progress hash includes untracked-file byte-contents ---
+(
+  _hwd="$(mktemp -d)"; cd "$_hwd" || exit 0
+  git init -q; git config user.email t@t; git config user.name t
+  echo base > tracked; git add tracked; git commit -qm init
+  printf 'one\n' > untracked_u            # untracked, non-ignored
+  h1="$(loop_state_hash "$_hwd")"
+  printf 'two\n' > untracked_u            # same name, different CONTENT, still untracked
+  h2="$(loop_state_hash "$_hwd")"
+  rm -rf "$_hwd"
+  [[ -n "$h1" && "$h1" != "$h2" ]] && echo "ok" || echo "bad h1=$h1 h2=$h2"
+) | { read -r r rest; [[ "$r" == "ok" ]] && ok "hash: untracked content change detected" || bad "hash untracked content $rest"; }
+
+# gitignored files must NOT affect the hash (exclude-standard honored)
+(
+  _hwd="$(mktemp -d)"; cd "$_hwd" || exit 0
+  git init -q; git config user.email t@t; git config user.name t
+  echo "ignored_*" > .gitignore; git add .gitignore; git commit -qm init
+  ha="$(loop_state_hash "$_hwd")"
+  printf 'x\n' > ignored_file
+  hb="$(loop_state_hash "$_hwd")"
+  rm -rf "$_hwd"
+  [[ "$ha" == "$hb" ]] && echo "ok" || echo "bad ha=$ha hb=$hb"
+) | { read -r r rest; [[ "$r" == "ok" ]] && ok "hash: gitignored file ignored" || bad "hash ignored $rest"; }
+
+# --- Task 2: recursion-depth is a hard bound ---
+r="$(loop_check_bounds '{"iteration":1,"recursion_depth":5,"bounds":{"max_iterations":99,"max_recursion_depth":5},"cost_so_far_usd":0,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "max_recursion_depth" ]] && ok "bounds: recursion depth trips" || bad "recursion got=$r"
+r="$(loop_check_bounds '{"iteration":1,"recursion_depth":2,"bounds":{"max_iterations":99,"max_recursion_depth":5},"cost_so_far_usd":0,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "ok" ]] && ok "bounds: recursion depth within ok" || bad "recursion within got=$r"
+# back-compat: state without recursion fields must not trip
+r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":99},"cost_so_far_usd":0,"no_progress_count":0,"started_at":"2999-01-01T00:00:00Z"}')"
+[[ "$r" == "ok" ]] && ok "bounds: no recursion fields -> ok" || bad "recursion backcompat got=$r"
+
+# --- Task 3: ultracode signal + ceiling-lift ---
+( unset CLAUDE_ULTRACODE; rm -f "$HOME/.claude/session-state/ultracode-state.json" 2>/dev/null
+  loop_ultracode_active && echo "on" || echo "off" ) | { read -r r; [[ "$r" == "off" ]] && ok "ultracode: default off" || bad "ultracode default $r"; }
+( export CLAUDE_ULTRACODE=1; loop_ultracode_active && echo "on" || echo "off" ) | { read -r r; [[ "$r" == "on" ]] && ok "ultracode: env on" || bad "ultracode env $r"; }
+( mkdir -p "$HOME/.claude/session-state"; echo '{"active":true}' > "$HOME/.claude/session-state/ultracode-state.json"
+  unset CLAUDE_ULTRACODE; loop_ultracode_active && echo "on" || echo "off" ) | { read -r r; [[ "$r" == "on" ]] && ok "ultracode: state on" || bad "ultracode state $r"; }
+rm -f "$HOME/.claude/session-state/ultracode-state.json" 2>/dev/null
+[[ "$(loop_effective_ceiling checkpoint true)"          == "bounded-checkpoint"  ]] && ok "ceiling: checkpoint+1"  || bad "ceiling cp"
+[[ "$(loop_effective_ceiling bounded-checkpoint true)"  == "bounded-autonomous"  ]] && ok "ceiling: bchk+1"       || bad "ceiling bchk"
+[[ "$(loop_effective_ceiling bounded-autonomous true)"  == "bounded-autonomous"  ]] && ok "ceiling: capped"       || bad "ceiling cap"
+[[ "$(loop_effective_ceiling checkpoint false)"         == "checkpoint"          ]] && ok "ceiling: off=identity" || bad "ceiling off"
+
+# --- Task 4: live mid-flight cost monitor ---
+MON="$REPO_ROOT/hooks/loop-cost-monitor.sh"
+[[ -x "$MON" ]] && ok "monitor: hook executable" || bad "monitor: not executable"
+run_mon() { LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$MON" <<< "$1"; }
+
+# loop_live_cost sums rows for the matching loop_id only
+mkdir -p "$HOME/.claude/logs"
+LOG="$HOME/.claude/logs/subagent-runs.jsonl"
+: > "$LOG"
+printf '%s\n' '{"event":"loop_iteration","loop_id":"L1","cost_usd":1.5}' >> "$LOG"
+printf '%s\n' '{"event":"loop_iteration","loop_id":"L1","cost_usd":2.0}' >> "$LOG"
+printf '%s\n' '{"event":"loop_iteration","loop_id":"OTHER","cost_usd":99}' >> "$LOG"
+lc="$(loop_live_cost L1)"
+awk -v v="$lc" 'BEGIN{exit !(v==3.5)}' && ok "monitor: live cost sums loop_id" || bad "live cost got=$lc"
+
+# active loop over budget -> deny + status budget_exceeded
+loop_write_state '{"active":true,"loop_id":"L1","bounds":{"per_run_budget_usd":3,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+out="$(run_mon '{"tool_name":"Bash"}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "monitor: over budget -> deny" || bad "monitor over-budget out=$out"
+[[ "$(loop_read_state | jq -r '.status')" == "budget_exceeded" ]] && ok "monitor: marks budget_exceeded" || bad "monitor status not set"
+
+# under budget -> allow (empty)
+loop_write_state '{"active":true,"loop_id":"L1","bounds":{"per_run_budget_usd":100,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+out="$(run_mon '{"tool_name":"Bash"}')"
+[[ -z "$out" ]] && ok "monitor: under budget -> allow" || bad "monitor under-budget out=$out"
+
+# no active loop -> allow
+loop_write_state '{"active":false,"loop_id":"L1","bounds":{"per_run_budget_usd":1}}'
+out="$(run_mon '{"tool_name":"Bash"}')"
+[[ -z "$out" ]] && ok "monitor: inactive -> allow" || bad "monitor inactive out=$out"
+: > "$LOG"
+
+# --- Task 5: Supabase loop_runs telemetry ---
+SQL="$REPO_ROOT/schemas/004-loop-runs.sql"
+[[ -f "$SQL" ]] && ok "telemetry: 004-loop-runs.sql present" || bad "telemetry: SQL missing"
+grep -q 'create table if not exists stack.loop_runs' "$SQL" && ok "telemetry: table defined" || bad "telemetry: no table"
+# balanced parens sanity
+_op="$(tr -cd '(' < "$SQL" | wc -c)"; _cp="$(tr -cd ')' < "$SQL" | wc -c)"
+[[ "$_op" == "$_cp" ]] && ok "telemetry: SQL parens balanced" || bad "telemetry: parens $_op/$_cp"
+
+# loop_runs_record: no Supabase creds -> no-op (rc 0) + local JSONL row written
+( unset SUPABASE_URL SUPABASE_SERVICE_KEY
+  loop_runs_record '{"loop_id":"LR1","status":"met","iteration":3,"cost_so_far_usd":1.25,"pattern":"ralph"}'
+  echo "rc=$?" ) | { read -r r; [[ "$r" == "rc=0" ]] && ok "telemetry: record rc=0 without creds" || bad "telemetry rc $r"; }
+LRLOG="$HOME/.claude/logs/loop-runs.jsonl"
+[[ -f "$LRLOG" ]] && [[ "$(jq -r 'select(.loop_id=="LR1") | .status' "$LRLOG" 2>/dev/null | tail -1)" == "met" ]] \
+  && ok "telemetry: local JSONL row written" || bad "telemetry: local row missing"
+# payload shape: numeric iterations + cost mapped correctly
+[[ "$(jq -r 'select(.loop_id=="LR1") | .iterations' "$LRLOG" 2>/dev/null | tail -1)" == "3" ]] \
+  && ok "telemetry: iterations mapped" || bad "telemetry: iterations wrong"
+# empty arg -> no-op rc 0
+loop_runs_record "" ; [[ $? -eq 0 ]] && ok "telemetry: empty arg no-op" || bad "telemetry empty arg"
+rm -f "$LRLOG" 2>/dev/null
+
+# --- Task 6: ADR-021 design-before-code gate ---
+GATE="$REPO_ROOT/hooks/design-gate.sh"
+[[ -x "$GATE" ]] && ok "gate: hook executable" || bad "gate: not executable"
+run_gate() { LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$GATE" <<< "$1"; }
+mkdir -p "$HOME/.claude/session-state"
+rm -f "$HOME/.claude/session-state/design-approved.json" 2>/dev/null
+
+# ultracode OFF -> always allow, even on a source file with no marker
+( unset CLAUDE_ULTRACODE
+  out="$(run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+  [[ -z "$out" ]] && echo ok || echo "bad:$out" ) | { read -r r; [[ "$r" == "ok" ]] && ok "gate: ultracode off -> allow" || bad "gate off $r"; }
+
+# ultracode ON + source file + no marker -> deny
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "gate: ultracode on + source -> deny" || bad "gate deny out=$out"
+
+# ultracode ON + docs target -> allow (must be able to write the spec)
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"docs/superpowers/specs/x.md"}}')"
+[[ -z "$out" ]] && ok "gate: docs always allowed" || bad "gate docs out=$out"
+
+# ultracode ON + tests target -> allow
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"tests/test-x.sh"}}')"
+[[ -z "$out" ]] && ok "gate: tests always allowed" || bad "gate tests out=$out"
+
+# ultracode ON + markdown (non-source) -> allow
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"README.md"}}')"
+[[ -z "$out" ]] && ok "gate: markdown allowed" || bad "gate md out=$out"
+
+# ultracode ON + source + approved marker -> allow
+echo '{"active":true}' > "$HOME/.claude/session-state/design-approved.json"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+[[ -z "$out" ]] && ok "gate: approved marker -> allow" || bad "gate marker out=$out"
+rm -f "$HOME/.claude/session-state/design-approved.json"
+
+# ============================================================================
+# Phase 3 — observability, smarter control, authoring path
+# ============================================================================
+
+# --- T6: durable corrections ---
+CORR="$HOME/.claude/session-state/loop-corrections.jsonl"
+rm -f "$CORR" 2>/dev/null
+loop_record_correction '{"loop_id":"C1","status":"no_progress","goal":"make tests pass","iteration":4}' "exited no_progress with goal unmet"
+[[ -f "$CORR" ]] && ok "corrections: row appended" || bad "corrections: no file"
+[[ "$(jq -r 'select(.loop_id=="C1") | .status' "$CORR" 2>/dev/null | tail -1)" == "no_progress" ]] && ok "corrections: status captured" || bad "corrections: status wrong"
+[[ "$(jq -r 'select(.loop_id=="C1") | .resolved' "$CORR" 2>/dev/null | tail -1)" == "false" ]] && ok "corrections: unresolved by default" || bad "corrections: resolved flag"
+[[ "$(jq -r 'select(.loop_id=="C1") | .hint' "$CORR" 2>/dev/null | tail -1)" == *"goal unmet"* ]] && ok "corrections: hint captured" || bad "corrections: hint missing"
+# empty arg -> no-op rc 0
+loop_record_correction "" ; [[ $? -eq 0 ]] && ok "corrections: empty arg no-op" || bad "corrections empty"
+# Stop-hook records a correction on a bound-trip exit (no_progress), NOT on met.
+rm -f "$CORR" 2>/dev/null
+( export CLAUDE_CODE_SESSION_ID="corrSess"
+  loop_write_state '{"active":true,"loop_id":"SH1","iteration":1,"bounds":{"max_iterations":1},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+  LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false,"session_id":"corrSess"}' >/dev/null 2>&1 )
+[[ -f "$CORR" ]] && [[ -n "$(jq -r 'select(.loop_id=="SH1")' "$CORR" 2>/dev/null)" ]] && ok "corrections: stop-hook records bound-trip" || bad "corrections: stop-hook missing"
+rm -f "$CORR" "$HOME/.claude/session-state/loop-state.corrSess.json" 2>/dev/null
+
+# --- T3: per-path design-gate marker ---
+GATE="$REPO_ROOT/hooks/design-gate.sh"
+run_gate() { LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$GATE" <<< "$1"; }
+mkdir -p "$HOME/.claude/session-state"
+MK="$HOME/.claude/session-state/design-approved.json"
+
+# path-scoped marker: matching glob -> allow; non-matching source -> deny
+echo '{"active":true,"approved_paths":["skills/foo/**"]}' > "$MK"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.sh"}}')"
+[[ -z "$out" ]] && ok "gate(p3): approved path allowed" || bad "gate(p3) approved out=$out"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/other/x.sh"}}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "gate(p3): unapproved path denied" || bad "gate(p3) unapproved out=$out"
+
+# legacy bare {active:true} -> all source allowed (back-compat)
+echo '{"active":true}' > "$MK"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/other/x.sh"}}')"
+[[ -z "$out" ]] && ok "gate(p3): legacy marker allows all source" || bad "gate(p3) legacy out=$out"
+
+# empty approved_paths -> treated as session-wide (allow)
+echo '{"active":true,"approved_paths":[]}' > "$MK"
+out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/other/x.sh"}}')"
+[[ -z "$out" ]] && ok "gate(p3): empty approved_paths = session-wide" || bad "gate(p3) empty out=$out"
+rm -f "$MK"
+
+# --- T2: real token-cost signal ---
+export LOOP_PRICE_TABLE="$REPO_ROOT/config/model-routing.json"
+# opus 4.8: $5/Mtok in, $25/Mtok out. 200k in + 100k out = 1.0 + 2.5 = 3.5
+c="$(loop_cost_from_usage 200000 100000 claude-opus-4-8)"
+awk -v v="$c" 'BEGIN{exit !(v>3.49 && v<3.51)}' && ok "cost_from_usage: opus priced" || bad "cost_from_usage got=$c"
+# unknown model -> 0 (fail-safe)
+c="$(loop_cost_from_usage 1000 1000 no-such-model)"
+awk -v v="$c" 'BEGIN{exit !(v==0)}' && ok "cost_from_usage: unknown model -> 0" || bad "cost_from_usage unknown=$c"
+# zero tokens -> 0
+c="$(loop_cost_from_usage 0 0 claude-opus-4-8)"
+awk -v v="$c" 'BEGIN{exit !(v==0)}' && ok "cost_from_usage: zero -> 0" || bad "cost_from_usage zero=$c"
+
+# monitor: usage payload pushes over budget -> deny (logged sum 0 + live 3.5 >= 3)
+mkdir -p "$HOME/.claude/logs"; : > "$HOME/.claude/logs/subagent-runs.jsonl"
+loop_write_state '{"active":true,"loop_id":"LIVE1","bounds":{"per_run_budget_usd":3,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" LOOP_PRICE_TABLE="$LOOP_PRICE_TABLE" bash "$REPO_ROOT/hooks/loop-cost-monitor.sh" <<< '{"tool_name":"Agent","model":"claude-opus-4-8","tool_response":{"usage":{"input_tokens":200000,"output_tokens":100000}}}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "monitor(p3): usage signal trips budget" || bad "monitor(p3) usage out=$out"
+# monitor: no usage + empty log + under budget -> allow
+loop_write_state '{"active":true,"loop_id":"LIVE2","bounds":{"per_run_budget_usd":100,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+out="$(LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$REPO_ROOT/hooks/loop-cost-monitor.sh" <<< '{"tool_name":"Bash"}')"
+[[ -z "$out" ]] && ok "monitor(p3): no usage + under budget -> allow" || bad "monitor(p3) allow out=$out"
+unset LOOP_PRICE_TABLE
+: > "$HOME/.claude/logs/subagent-runs.jsonl"
+
+# --- T1: telemetry feedback (loop_stats + loop_calibrate + /loop-review) ---
+[[ -f "$REPO_ROOT/skills/loop-review/SKILL.md" ]] && ok "loop-review: skill present" || bad "loop-review: missing"
+# empty history -> []
+STATLOG="$(mktemp)"; : > "$STATLOG"
+[[ "$(loop_stats "$STATLOG")" == "[]" ]] && ok "stats: empty -> []" || bad "stats empty"
+# seed: pattern ralph x3 (iterations 4,6,20; one budget_exceeded, one met, one max_iterations)
+printf '%s\n' \
+  '{"loop_id":"a","pattern":"ralph","status":"met","iterations":4,"cost_usd":1}' \
+  '{"loop_id":"b","pattern":"ralph","status":"budget_exceeded","iterations":6,"cost_usd":5}' \
+  '{"loop_id":"c","pattern":"ralph","status":"max_iterations","iterations":20,"cost_usd":2}' \
+  '{"loop_id":"d","pattern":"eval-driven","status":"met","iterations":2,"cost_usd":1}' \
+  >> "$STATLOG"
+ST="$(loop_stats "$STATLOG")"
+[[ "$(echo "$ST" | jq -r 'length')" == "2" ]] && ok "stats: groups by pattern" || bad "stats groups=$(echo "$ST" | jq -r 'length')"
+[[ "$(echo "$ST" | jq -r '.[] | select(.pattern=="ralph") | .runs')" == "3" ]] && ok "stats: ralph runs=3" || bad "stats ralph runs"
+p95="$(echo "$ST" | jq -r '.[] | select(.pattern=="ralph") | .p95_iterations')"
+[[ "$p95" == "20" ]] && ok "stats: p95 iterations" || bad "stats p95=$p95"
+# calibrate: proposed >= ceil(p95*1.2)=24, and >= current(25) -> 25
+CAL="$(loop_calibrate 25 "$STATLOG")"
+prop="$(echo "$CAL" | jq -r '.[] | select(.pattern=="ralph") | .proposed_max_iterations')"
+[[ "$prop" == "25" ]] && ok "calibrate: floored at current" || bad "calibrate prop=$prop"
+# with low current, proposed tracks p95*1.2 -> ceil(24)=24
+CAL2="$(loop_calibrate 5 "$STATLOG")"
+prop2="$(echo "$CAL2" | jq -r '.[] | select(.pattern=="ralph") | .proposed_max_iterations')"
+[[ "$prop2" == "24" ]] && ok "calibrate: tracks p95*1.2" || bad "calibrate prop2=$prop2"
+# calibrate never writes stack-config (pure function — just verify it returns JSON)
+echo "$CAL" | jq -e 'type=="array"' >/dev/null 2>&1 && ok "calibrate: returns array (no side effects)" || bad "calibrate type"
+rm -f "$STATLOG"
+
+# --- T4: 5-point effort enum (additive; legacy is a subset) ---
+SCH="$REPO_ROOT/schemas/stack-config-schema.json"
+DEF="$REPO_ROOT/schemas/stack-defaults-schema.json"
+eff="$(jq -c '.properties.session_prefs.properties.model_effort.enum' "$SCH" 2>/dev/null)"
+[[ "$(echo "$eff" | jq -r 'length')" == "5" ]] && ok "effort: 5 values in config schema" || bad "effort config count=$eff"
+echo "$eff" | jq -e 'index("minimal") and index("thorough")' >/dev/null 2>&1 && ok "effort: minimal+thorough added" || bad "effort new values missing"
+# legacy values still valid (back-compat = subset)
+echo "$eff" | jq -e 'index("fast") and index("balanced") and index("max")' >/dev/null 2>&1 && ok "effort: legacy values retained" || bad "effort legacy missing"
+# defaults schema kept in sync
+[[ "$(jq -r '.properties.session_prefs_defaults.properties.model_effort.enum | length' "$DEF" 2>/dev/null)" == "5" ]] && ok "effort: defaults schema in sync" || bad "effort defaults out of sync"
+# default unchanged
+[[ "$(jq -r '.properties.session_prefs.properties.model_effort.default' "$SCH")" == "balanced" ]] && ok "effort: default still balanced" || bad "effort default changed"
+
+# --- T5: vendored authoring skills (using-superpowers + brainstorming) ---
+for s in using-superpowers brainstorming; do
+  f="$REPO_ROOT/skills/$s/SKILL.md"
+  [[ -f "$f" ]] && ok "vendor: $s present" || bad "vendor: $s missing"
+  head -1 "$f" 2>/dev/null | grep -q '^---$' && ok "vendor: $s frontmatter" || bad "vendor: $s no frontmatter"
+done
+# brainstorming text-core: must NOT actually invoke a node server / GUI process
+! grep -qiE 'localhost:|127\.0\.0\.1|npm run|node .*\.js|express\(|listen\([0-9]' "$REPO_ROOT/skills/brainstorming/SKILL.md" \
+  && ok "vendor: brainstorming is text-core (no server)" || bad "vendor: brainstorming invokes server"
+# registered in tier-1 manifest
+jq -e '[.files.global[]?.from | select(test("using-superpowers|brainstorming"))] | length == 2' "$REPO_ROOT/config/tier-manifests/tier-1.json" >/dev/null 2>&1 \
+  && ok "vendor: tier-1 manifest copies both" || bad "vendor: manifest missing entries"
+
+# --- T7: auto-enablement loop-shape nudge ---
+NUDGE="$REPO_ROOT/hooks/loop-shape-nudge.sh"
+[[ -x "$NUDGE" ]] && ok "nudge: hook executable" || bad "nudge: not executable"
+# Build a throwaway Tier-2 stack project so the gate (Tier>=2) passes.
+NPROJ="$(mktemp -d)"; mkdir -p "$NPROJ/.claude"
+echo '{"stack_tier":2}' > "$NPROJ/.claude/stack-config.json"
+NHOME="$(mktemp -d)"; mkdir -p "$NHOME/.claude/session-state"
+run_nudge() { CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$1"; }
+mkpayload() { jq -nc --arg p "$1" --arg c "$NPROJ" '{prompt:$p, cwd:$c, session_id:"nudgeSess"}'; }
+
+# loop-shaped prompt, not onboarded -> emits the onboarding reminder
+out="$(run_nudge "$(mkpayload "refactor the parser and keep running until all tests pass")")"
+echo "$out" | grep -q 'Loop-shape detected' && ok "nudge: loop-shaped -> offers onboarding" || bad "nudge loop-shaped out=$out"
+# dedupe: second call same session -> silent
+out="$(run_nudge "$(mkpayload "keep going until the build is green")")"
+[[ -z "$out" ]] && ok "nudge: once-per-session dedupe" || bad "nudge dedupe out=$out"
+# fresh session but onboarded marker present -> silent
+echo '{"onboarded":true}' > "$NHOME/.claude/session-state/loop-onboarded.json"
+out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$(jq -nc --arg p "iterate until the eval threshold is met" --arg c "$NPROJ" '{prompt:$p,cwd:$c,session_id:"other"}')")"
+[[ -z "$out" ]] && ok "nudge: onboarded -> silent" || bad "nudge onboarded out=$out"
+rm -f "$NHOME/.claude/session-state/loop-onboarded.json"
+# one-shot / non-loop prompt -> silent
+out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$(jq -nc --arg p "fix the typo in the readme header" --arg c "$NPROJ" '{prompt:$p,cwd:$c,session_id:"s3"}')")"
+[[ -z "$out" ]] && ok "nudge: one-shot -> silent" || bad "nudge one-shot out=$out"
+# explain/read prompt with 'until' -> silent (negative guard)
+out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$(jq -nc --arg p "explain how the loop runs until the goal is met" --arg c "$NPROJ" '{prompt:$p,cwd:$c,session_id:"s4"}')")"
+[[ -z "$out" ]] && ok "nudge: explain -> silent" || bad "nudge explain out=$out"
+# non-stack dir -> silent
+out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$(jq -nc --arg p "keep iterating until tests pass please" --arg c "$(mktemp -d)" '{prompt:$p,cwd:$c,session_id:"s5"}')")"
+[[ -z "$out" ]] && ok "nudge: non-stack dir -> silent" || bad "nudge non-stack out=$out"
+rm -rf "$NPROJ" "$NHOME"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

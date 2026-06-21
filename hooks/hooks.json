@@ -17,7 +17,8 @@
       {
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/brevity-drift.sh" },
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-nudge.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-nudge.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loop-shape-nudge.sh" }
         ]
       }
     ],
@@ -26,19 +27,27 @@
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bulk-job-reminder.sh" },
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/irreversible-deny.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/irreversible-deny.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loop-cost-monitor.sh" }
         ]
       },
       {
         "matcher": "Agent",
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-log.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-log.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loop-cost-monitor.sh" }
         ]
       },
       {
         "matcher": "Workflow",
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/workflow-roster-check.sh" }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/design-gate.sh" }
         ]
       }
     ],

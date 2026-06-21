@@ -32,6 +32,11 @@ Run at the end of a working session. Writes `.claude/next_prompt.md` (the "live"
   - In-play set: union the above agent names with all names in `(.roster_agents // [])` from `event=="workflow_dispatch"` rows (same session/project filter) — roles exercised via rostered workflows count as active.
   - Unrostered write-heavy workflows: count `event=="workflow_dispatch"` rows where `write_heavy==true` and `(.roster_agents // []) == []` and `(.uses_roster != true)`.
   - Misses: apply rules from `/team-status` Step 4 (financial-code → validator; schema-migration → data-engineer; deploy → ops; any-dispatch → architect-first).
+- **Durable corrections (loop-eng Phase 3, skip if file missing):** read unresolved
+  loop corrections so a goal-unmet loop's lesson carries forward —
+  `jq -c 'select(.resolved != true)' ~/.claude/session-state/loop-corrections.jsonl 2>/dev/null`.
+  Summarize each as `loop <loop_id> exited <status> — <hint>` under a **Loop corrections**
+  bullet in *What's blocked & why* (or *Gotchas*). If none, omit.
 
 ### 4. Compose the handoff content
 

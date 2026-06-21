@@ -67,6 +67,11 @@ loop_state_hash() {
   { git -C "$cwd" rev-parse HEAD 2>/dev/null
     git -C "$cwd" diff HEAD 2>/dev/null
     git -C "$cwd" status --porcelain 2>/dev/null
+    # Phase-2 (d): include the byte-contents of untracked, non-ignored files so a
+    # loop that only edits an untracked file is detected as making progress.
+    # --exclude-standard honors .gitignore; -z + xargs -0 are filename-safe.
+    git -C "$cwd" ls-files --others --exclude-standard -z 2>/dev/null \
+      | (cd "$cwd" 2>/dev/null && xargs -0 cat 2>/dev/null)
   } | $_sha_cmd 2>/dev/null | awk '{print $1}'
 }
 
@@ -107,9 +112,13 @@ loop_validate_spec() {
 loop_check_bounds() {
   local json="${1:-}"
   [[ -z "$json" ]] && { echo "ok"; return; }
-  local iter cap cost budget npc npe started now elapsed timeout
+  local iter cap cost budget npc npe started now elapsed timeout depth dcap
   iter="$(echo "$json"  | jq -r '.iteration // 0')"
   cap="$(echo "$json"   | jq -r '.bounds.max_iterations // 1000000')"
+  # Phase-2 (c): recursion depth is now a hard bound (was advisory in Phase 1).
+  # Callers increment .recursion_depth on fan-out; bound is .bounds.max_recursion_depth.
+  depth="$(echo "$json" | jq -r '.recursion_depth // 0')"
+  dcap="$(echo "$json"  | jq -r '.bounds.max_recursion_depth // empty')"
   cost="$(echo "$json"  | jq -r '.cost_so_far_usd // 0')"
   budget="$(echo "$json"| jq -r '.bounds.per_run_budget_usd // empty')"
   npc="$(echo "$json"   | jq -r '.no_progress_count // 0')"
@@ -132,6 +141,12 @@ loop_check_bounds() {
   if [[ -n "$timeout" && ! "$timeout" =~ ^[0-9]+$ ]]; then
     # Non-integer timeout — treat as bound tripped.
     echo "timeout"; return
+  fi
+  # Recursion depth check (before iteration): a non-integer cap is treated as tripped.
+  if [[ -n "$dcap" ]]; then
+    [[ "$depth" =~ ^[0-9]+$ ]] || depth=0
+    if [[ ! "$dcap" =~ ^[0-9]+$ ]]; then echo "max_recursion_depth"; return; fi
+    [[ "$depth" -ge "$dcap" ]] && { echo "max_recursion_depth"; return; }
   fi
   [[ "$iter" -ge "$cap" ]] && { echo "max_iterations"; return; }
   # Use awk -v to pass values to avoid code injection via string interpolation.
@@ -162,4 +177,190 @@ loop_accrue_cost() {
   mkdir -p "$(dirname "$log")" 2>/dev/null || return 0
   jq -nc --argjson d "$delta" --arg lid "$(echo "$state" | jq -r '.loop_id // "loop"')" \
     '{event:"loop_iteration", loop_id:$lid, cost_usd:$d}' >>"$log" 2>/dev/null || true
+}
+
+# Phase-2 (b): live within-iteration cost for a loop. Sums cost_usd/cost across
+# all subagent-runs.jsonl rows tagged with this loop_id (optionally only those at
+# or after started_at when the row carries a .ts). This is the authoritative
+# mid-flight figure the live monitor compares to the budget — unlike the
+# between-iteration cost_so_far_usd snapshot, it does not wait for the Stop hook.
+# Prints a number (0 when no data). Fail-safe.
+loop_live_cost() {
+  local lid="${1:-}" since="${2:-}"
+  local log="${_loop_home}/.claude/logs/subagent-runs.jsonl"
+  [[ -z "$lid" || ! -f "$log" ]] && { echo 0; return 0; }
+  jq -rs --arg lid "$lid" --arg since "$since" '
+    [ .[]
+      | select(.loop_id == $lid)
+      | select( ($since == "") or ((.ts // "") == "") or (.ts >= $since) )
+      | ((.cost_usd // .cost // 0) | tonumber? // 0)
+    ] | add // 0
+  ' "$log" 2>/dev/null || echo 0
+}
+
+# Phase-2 telemetry: record one finished loop run. Always appends a row to the
+# local JSONL telemetry log (always-on); additionally POSTs to the Supabase
+# stack.loop_runs table (004-loop-runs.sql) IFF both SUPABASE_URL and
+# SUPABASE_SERVICE_KEY are set and curl exists. No-op-safe: missing creds, missing
+# curl, or any network error never crash the caller (matches the cost-log pattern).
+# Usage: loop_runs_record '<loop-state-json-with-terminal-status>'
+loop_runs_record() {
+  local state="${1:-}"
+  [[ -z "$state" ]] && return 0
+  # Build the row from loop-state fields.
+  local row
+  row="$(echo "$state" | jq -c '{
+    loop_id:         (.loop_id // "loop"),
+    session_id:      (env.CLAUDE_CODE_SESSION_ID // null),
+    pattern:         (.pattern // null),
+    autonomy:        (.autonomy // null),
+    goal:            (.goal // null),
+    status:          (.status // "unknown"),
+    iterations:      (.iteration // 0),
+    recursion_depth: (.recursion_depth // 0),
+    cost_usd:        (.cost_so_far_usd // 0),
+    started_at:      (.started_at // null),
+    ended_at:        (now | todateiso8601)
+  }' 2>/dev/null)" || return 0
+  [[ -z "$row" ]] && return 0
+
+  # Always-on local telemetry.
+  local log="${_loop_home}/.claude/logs/loop-runs.jsonl"
+  mkdir -p "$(dirname "$log")" 2>/dev/null && printf '%s\n' "$row" >>"$log" 2>/dev/null || true
+
+  # Optional Supabase rollup (Tier 3+). Graceful no-op without creds/curl.
+  [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_SERVICE_KEY:-}" ]] && return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  curl -sf -X POST "${SUPABASE_URL%/}/rest/v1/loop_runs" \
+    -H "apikey: ${SUPABASE_SERVICE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
+    -H "Content-Type: application/json" \
+    -H "Content-Profile: stack" \
+    -H "Prefer: return=minimal" \
+    --data "$row" >/dev/null 2>&1 || true
+  return 0
+}
+
+# Phase-3 (ADR-023): aggregate loop telemetry from the local loop-runs.jsonl into
+# per-pattern stats. Prints a JSON array (one object per pattern). Empty/no log ->
+# []. Fail-safe. Optional arg overrides the log path (for tests).
+loop_stats() {
+  local log="${1:-${_loop_home}/.claude/logs/loop-runs.jsonl}"
+  [[ -f "$log" ]] || { echo '[]'; return 0; }
+  jq -rs '
+    def pct($p): (sort | if length==0 then 0 else .[ ([(((length * $p) | ceil) - 1), 0] | max) ] end);
+    group_by(.pattern // "unknown")
+    | map({
+        pattern: (.[0].pattern // "unknown"),
+        runs: length,
+        met_pct:              ((map(select(.status=="met"))            | length) * 100 / length),
+        budget_exceeded_pct:  ((map(select(.status=="budget_exceeded"))| length) * 100 / length),
+        iter_cap_pct:         ((map(select(.status=="max_iterations")) | length) * 100 / length),
+        p50_iterations:       ([ .[].iterations // 0 ] | pct(0.50)),
+        p95_iterations:       ([ .[].iterations // 0 ] | pct(0.95)),
+        avg_cost_usd:         (((map(.cost_usd // 0) | add) / length) | (.*1000000|round)/1000000)
+      })
+  ' "$log" 2>/dev/null || echo '[]'
+}
+
+# Propose (print only — never auto-apply) a loop_policy.max_iterations bump per
+# pattern: ceil(p95 * 1.2), floored at the current default. Reads loop_stats.
+# Prints a JSON array of {pattern, observed_p95, proposed_max_iterations}.
+loop_calibrate() {
+  local current="${1:-25}" log="${2:-}"
+  [[ "$current" =~ ^[0-9]+$ ]] || current=25
+  local stats; stats="$(loop_stats "$log")"
+  echo "$stats" | jq -c --argjson cur "$current" '
+    map({
+      pattern: .pattern,
+      runs: .runs,
+      observed_p95: .p95_iterations,
+      proposed_max_iterations: ([ ($cur), (((.p95_iterations * 1.2) | ceil)) ] | max)
+    })
+  ' 2>/dev/null || echo '[]'
+}
+
+# Phase-3 (ADR-023): convert token usage to USD via the single audited price
+# table (config/model-routing.json -> providers.*.models[id].pricing_per_million_*).
+# Usage: loop_cost_from_usage <input_tokens> <output_tokens> [model_id]
+# Prints a USD number (0 on any error / unknown model). Fail-safe.
+loop_cost_from_usage() {
+  local in_tok="${1:-0}" out_tok="${2:-0}" model="${3:-claude-opus-4-8}"
+  [[ "$in_tok"  =~ ^[0-9]+$ ]] || in_tok=0
+  [[ "$out_tok" =~ ^[0-9]+$ ]] || out_tok=0
+  # Resolve the price table: explicit override, then installed, then repo-relative.
+  local pt="${LOOP_PRICE_TABLE:-}"
+  if [[ -z "$pt" ]]; then
+    if [[ -f "${_loop_home}/.claude/config/model-routing.json" ]]; then
+      pt="${_loop_home}/.claude/config/model-routing.json"
+    else
+      local _here; _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+      [[ -f "${_here}/../../config/model-routing.json" ]] && pt="${_here}/../../config/model-routing.json"
+    fi
+  fi
+  [[ -z "$pt" || ! -f "$pt" ]] && { echo 0; return 0; }
+  jq -rn --slurpfile t "$pt" --arg m "$model" --argjson i "$in_tok" --argjson o "$out_tok" '
+    ([ ($t[0].providers // {})[] | .models? // {} ] | add // {}) as $models
+    | ($models[$m] // {}) as $mdl
+    | ( (($mdl.pricing_per_million_input  // 0) * $i / 1000000)
+      + (($mdl.pricing_per_million_output // 0) * $o / 1000000) )
+  ' 2>/dev/null || echo 0
+}
+
+# Phase-3 (spec §6.7): durable corrections. When a loop exits without meeting its
+# goal (no_progress / escalated / a bound trip), append a structured note so the
+# lesson compounds — /handoff folds unresolved corrections into the next session.
+# Always-on local append; fail-safe (never crashes the Stop hook).
+# Usage: loop_record_correction '<loop-state-json>' [hint]
+loop_record_correction() {
+  local state="${1:-}" hint="${2:-}"
+  [[ -z "$state" ]] && return 0
+  local row
+  row="$(echo "$state" | jq -c --arg hint "$hint" '{
+    ts:       (now | todateiso8601),
+    loop_id:  (.loop_id // "loop"),
+    status:   (.status // "unknown"),
+    goal:     (.goal // null),
+    iteration:(.iteration // 0),
+    hint:     (if $hint == "" then null else $hint end),
+    resolved: false
+  }' 2>/dev/null)" || return 0
+  [[ -z "$row" ]] && return 0
+  local f="${LOOP_STATE_DIR}/loop-corrections.jsonl"
+  mkdir -p "$LOOP_STATE_DIR" 2>/dev/null && printf '%s\n' "$row" >>"$f" 2>/dev/null || true
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Ultracode signal (Phase 2 / spec open-question 1)
+# ---------------------------------------------------------------------------
+# Ultracode is a session-scoped risk dial: when on, the loop autonomy ceiling is
+# raised one level above the tier default (capped at bounded-autonomous). It is
+# deliberately NOT persisted in stack-config — it is a per-session opt-in, set by
+# env (CLAUDE_ULTRACODE) or the /ultracode skill's session-state flag.
+# Returns rc 0 when active, rc 1 otherwise. Fail-safe: any error -> inactive.
+loop_ultracode_active() {
+  local v="${CLAUDE_ULTRACODE:-}"
+  case "${v,,}" in
+    1|true|on|yes) return 0 ;;
+  esac
+  local f="${LOOP_STATE_DIR}/ultracode-state.json"
+  if [[ -f "$f" ]]; then
+    [[ "$(jq -r '.active // false' "$f" 2>/dev/null)" == "true" ]] && return 0
+  fi
+  return 1
+}
+
+# Compute the effective autonomy ceiling given the tier ceiling and whether
+# ultracode is active. Ultracode raises one level, capped at bounded-autonomous.
+# Usage: loop_effective_ceiling <tier_ceiling> <true|false>
+loop_effective_ceiling() {
+  local base="${1:-checkpoint}" ultra="${2:-false}"
+  if [[ "$ultra" != "true" ]]; then printf '%s' "$base"; return 0; fi
+  case "$base" in
+    checkpoint)          printf 'bounded-checkpoint' ;;
+    bounded-checkpoint)  printf 'bounded-autonomous' ;;
+    bounded-autonomous)  printf 'bounded-autonomous' ;;   # already at cap
+    *)                   printf '%s' "$base" ;;            # unknown -> identity
+  esac
 }

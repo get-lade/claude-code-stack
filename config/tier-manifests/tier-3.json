@@ -12,6 +12,9 @@
       { "from": "agents/architecture-critic.md", "to": "~/.claude/agents/architecture-critic.md" },
       { "from": "agents/accessibility-auditor.md", "to": "~/.claude/agents/accessibility-auditor.md" },
       { "from": "config/domain-modes.json", "to": "~/.claude/config/domain-modes.json" }
+    ],
+    "schemas": [
+      { "from": "schemas/004-loop-runs.sql", "apply_to_supabase": true }
     ]
   },
   "requirements": [
