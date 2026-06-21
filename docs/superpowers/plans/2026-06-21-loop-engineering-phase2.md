@@ -1,5 +1,9 @@
 # Loop-Engineering Control Plane — Phase 2 + ADR-021 Implementation Plan
 
+> **STATUS: COMPLETE (PR #42).** All tasks T1–T7 shipped; 118 loop tests + full
+> repo suite green; tier-2 (98/0) and tier-3 (105/0) installs pass. The checkbox
+> steps below are the as-built record.
+
 > **For agentic workers:** TDD task-by-task. Steps use checkbox (`- [ ]`) syntax. Each task = test → fail → implement → pass → commit.
 
 **Goal:** Close every stated Phase-1 residual and ship Phase-2 of the loop-engineering control plane (spec `docs/superpowers/specs/2026-06-20-loop-engineering-design.md` §11), plus the sibling **ADR-021** superpowers design-before-code gate (spec §10, renumbered from ADR-020 which became per-session-loop-state).
