@@ -137,6 +137,27 @@ What happens at session start and at agent runtime:
 the CLIs not preinstalled is fully capable; the gate must not declare itself
 unavailable. `printenv` is how to detect the keys.
 
+### Two layers, and the one that doesn't work (ADR-022)
+
+A key in the environment is necessary but not sufficient — the outbound call to
+`api.openai.com` also has to be **allowed by the network policy**. The
+auto-mode sandbox classifier hard-denies that call as data-exfiltration
+(private repo source → external endpoint), which is correct. So both layers must
+be set, and both at the **environment** level:
+
+| Need | Set it here | Not here |
+|---|---|---|
+| Key reaches the **subagent shell** | Environment **variables** (web UI) / exported in the launching shell | A Keychain-only secret, or an in-repo settings file |
+| `api.openai.com` is **reachable** | Environment **network policy** / managed `sandbox.network.allowedDomains` set **before** the session | In-session `.claude/settings.local.json` — **hard-denied** as classifier-bypass |
+
+The agents run `scripts/lib/cross-family-preflight.sh` **first** and report a
+`VERDICT` (`READY` / `BLOCKED_NETWORK` / `BLOCKED_NOCREDS`) up front. When the
+path is provably unavailable they emit a **labeled Claude-only deviation** and
+hand back a structured decision (`re-run-with-key` / `proceed-with-deviation` /
+`merge-with-tracked-follow-up`) — the PR is never stranded. Full setup + the
+decision rules are in
+[`docs/runbooks/cross-family-review-cloud.md`](runbooks/cross-family-review-cloud.md).
+
 ---
 
 ## Verify `/goodmorning` resolves in a fresh cloud session

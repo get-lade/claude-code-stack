@@ -10,6 +10,7 @@ Tests for the stack itself. Run before any release / breaking change.
 - `test-merger-session-hooks.sh` (v1.1) — verify nested SessionStart hooks from multiple tiers merge correctly (Tier 0's hook + Tier 2's hook both fire after merge).
 - `test-merger-interactive.sh` — verify the interactive conflict prompt (approve → stack value, decline → user value kept), driven through a pty via `expect`. Skips cleanly if `expect` is unavailable.
 - `test-cloud-bootstrap.sh` — verify `scripts/cloud-bootstrap.sh` never hard-fails a cloud session: no-op outside cloud, warn+exit 0 on missing token, short-circuit on the per-boot marker. Offline-only (the clone+install path is covered by `test-install.sh`).
+- `test-cross-family-preflight.sh` — unit tests for `scripts/lib/cross-family-preflight.sh` (ADR-022): the verdict matrix (`READY` / `BLOCKED_NETWORK` / `BLOCKED_NOCREDS` / `PROBE_SKIPPED`), `OPENAI_API_KEY` env detection, and the `cfp_log_deviation` writer. Network reachability is stubbed — no real outbound call.
 - `test-workflow-roster-check.sh` — unit tests for `hooks/workflow-roster-check.sh`: warn/block/quiet/off decision table, roster-name extraction (both quote forms), Tier<2 gate, always-log invariant, backward-compat with old rows lacking `roster_agents`, and the base/team settings-template split (`settings.global.template.json` vs the tier-2-only `settings.team.template.json`) plus re-merge idempotency.
 
 ## Running
@@ -22,6 +23,7 @@ cd tests
 ./test-merger-session-hooks.sh
 ./test-merger-interactive.sh
 ./test-workflow-roster-check.sh
+./test-cross-family-preflight.sh
 ```
 
 All tests must pass for a release tag. CI runs this whole suite in the

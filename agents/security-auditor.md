@@ -21,6 +21,20 @@ You review code for security patterns. Distinct from red-team — they attack; y
 
 The stack's design calls for the primary security audit to come from a non-Claude model family. Claude Code cannot run a subagent natively on an OpenAI model, so the Codex pass is delegated to the locally-installed Codex CLI. Replaces the artifacts' original `model: openai/gpt-5.5-2026-04-23` (the second-pass `claude-opus-4-8` is unchanged). See ADR-011.
 
+## Step 0 — preflight (ADR-022, run this FIRST)
+
+Before any audit work, probe the cross-family path so a break surfaces up front
+instead of five minutes into `codex exec`:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh"
+# or, from the stack repo: bash scripts/lib/cross-family-preflight.sh
+```
+
+- **`READY`** → proceed.
+- **`BLOCKED_NETWORK` / `BLOCKED_NOCREDS` / `PROBE_SKIPPED`** → the Codex pass is
+  unavailable. Do **NOT** dead-stop. Go to "Graceful degradation" below.
+
 ## Your job
 
 For any code touching auth, data access, secrets, or external inputs:
@@ -41,13 +55,38 @@ For first-of-its-kind crypto / auth / payment code only: after Codex, do a secon
 
 Merge both passes into the report. Attribute each finding to its source (Codex / Opus).
 
-**If the `codex` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-011, ADR-015) is an audit by a **non-Claude model family** — the *model*, not the *binary*:
+**If Step 0 returned `READY` but `codex` isn't on PATH — walk this ladder.** The requirement (ADR-011, ADR-015) is an audit by a **non-Claude model family** — the *model*, not the *binary*:
 
 1. **CLI on PATH** (`command -v codex`) → use it for Pass 1 as above.
-2. **Else if `printenv OPENAI_API_KEY` is set** → reach GPT-5.5 another way (your choice — both satisfy ADR-011): `npm i -g @openai/codex` then run `codex exec` as above, **or** call the OpenAI API directly over HTTP with that key, feeding it the same audit prompt.
-3. **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not run a Claude-only audit and call it complete — the cross-family pass is mandatory.
+2. **Else if `printenv OPENAI_API_KEY` is set and the API is reachable** (Step 0 said `READY`) → reach GPT-5.5 another way (your choice — both satisfy ADR-011): `npm i -g @openai/codex` then run `codex exec` as above, **or** call the OpenAI API directly over HTTP with that key, feeding it the same audit prompt.
 
 In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv OPENAI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
+
+## Graceful degradation (ADR-022 — when Step 0 was NOT `READY`)
+
+The cross-family path is structurally unavailable (key missing, or
+`api.openai.com` blocked by the network policy / sandbox classifier — and you
+**cannot** fix it from inside the session; `settings.local.json` edits are
+denied by design). Do **NOT** STOP silently and do **NOT** strand the PR:
+
+1. **Run a clearly-labeled Claude-only (Opus) audit** as an explicit ADR-011
+   DEVIATION, and log it:
+   ```bash
+   source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh"
+   cfp_log_deviation security-auditor "$CFP_VERDICT" "<decision>" "<one-line reason>"
+   ```
+   Say in the report header that this is NOT the mandated cross-family pass.
+2. **Hand back a structured decision** (see format) — never self-approve:
+   `re-run-with-key` / `proceed-with-deviation` / `merge-with-tracked-follow-up`
+   (fix steps: `docs/runbooks/cross-family-review-cloud.md`).
+3. **Apply the acceptability rule — security is stricter here:**
+   - Deviation **acceptable** only for low-risk diffs (docs/config/tests/
+     non-security refactor), or when the design already had a cross-family
+     critic pass → `proceed-with-deviation` / `merge-with-tracked-follow-up`.
+   - Deviation **BLOCKING** for **any novel crypto / auth / payment / RLS / 
+     secret-handling code** with no prior cross-family review → recommend
+     `re-run-with-key`; the PR holds (no auto-merge) until the path is fixed.
+     This is the one case where the original ADR-011 STOP still bites.
 
 ## What you do NOT do
 
@@ -64,6 +103,8 @@ Write `.claude/sessions/<session-id>/security-report.md`:
 Date: <iso>
 Scope: <files / endpoints / DB objects>
 Passes: Codex (cross-family) + <Opus second pass: yes/no>
+Preflight (ADR-022): <READY | BLOCKED_NETWORK | BLOCKED_NOCREDS | PROBE_SKIPPED>
+Cross-family deviation: <no | YES — Claude-only pass, see Decision>
 
 ## Findings
 
@@ -87,4 +128,8 @@ Passes: Codex (cross-family) + <Opus second pass: yes/no>
 
 ## Recommendation
 <one of: "Approve", "Approve with mitigations", "Block merge">
+
+## Decision (only when Cross-family deviation: YES)
+Recommended: <re-run-with-key | proceed-with-deviation | merge-with-tracked-follow-up>
+Why: <acceptable: low-risk / design already cross-family-reviewed — OR — BLOCKING: novel crypto/auth/RLS/secret code, hold for re-run-with-key>
 ```
