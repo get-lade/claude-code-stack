@@ -391,15 +391,28 @@ loop_record_correction() {
 # env (CLAUDE_ULTRACODE) or the /ultracode skill's session-state flag.
 # Returns rc 0 when active, rc 1 otherwise. Fail-safe: any error -> inactive.
 loop_ultracode_active() {
-  local v="${CLAUDE_ULTRACODE:-}"
-  # bash 3.2 (macOS default) lacks ${v,,}; match case-insensitively instead.
-  case "$v" in
-    1|[Tt][Rr][Uu][Ee]|[Oo][Nn]|[Yy][Ee][Ss]) return 0 ;;
-  esac
-  local f="${LOOP_STATE_DIR:-${HOME:-/tmp}/.claude/session-state}/ultracode-state.json"
+  # Explicit per-session state (set by /ultracode) is AUTHORITATIVE and overrides
+  # any ambient CLAUDE_ULTRACODE the harness/SDK may inject into the hook runtime,
+  # so `/ultracode off` reliably disables the gate. But it is authoritative ONLY
+  # when .active is an explicit boolean: a present-but-empty / malformed / no-.active
+  # file is NOT authoritative and falls through to the env signal. This is
+  # deliberate — the design-gate enforces only while ON, so treating a blank/garbage
+  # file as OFF would silently disable enforcement (fail-open). Falling through to
+  # env fails TOWARD enforcing. The env var is the fallback when no explicit state
+  # exists. Fail-safe: any jq error -> not authoritative -> env fallback.
+  local f="${LOOP_STATE_DIR:-${_loop_home}/.claude/session-state}/ultracode-state.json"
   if [[ -f "$f" ]]; then
-    [[ "$(jq -r '.active // false' "$f" 2>/dev/null)" == "true" ]] && return 0
+    case "$(jq -r 'if (.active|type)=="boolean" then (.active|tostring) else "none" end' "$f" 2>/dev/null)" in
+      true)  return 0 ;;
+      false) return 1 ;;   # explicit /ultracode off -> OFF, overrides truthy env
+      *)     : ;;          # empty/malformed/no boolean .active -> fall through to env
+    esac
   fi
+  # No authoritative state -> fall back to the env signal. Portable lowercase:
+  # macOS default bash is 3.2, which lacks the ${v,,} expansion.
+  case "$(printf '%s' "${CLAUDE_ULTRACODE:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|on|yes) return 0 ;;
+  esac
   return 1
 }
 

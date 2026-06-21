@@ -559,6 +559,38 @@ r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":99},"cost_so_f
 ( mkdir -p "$HOME/.claude/session-state"; echo '{"active":true}' > "$HOME/.claude/session-state/ultracode-state.json"
   unset CLAUDE_ULTRACODE; loop_ultracode_active && echo "on" || echo "off" ) | { read -r r; [[ "$r" == "on" ]] && ok "ultracode: state on" || bad "ultracode state $r"; }
 rm -f "$HOME/.claude/session-state/ultracode-state.json" 2>/dev/null
+# Follow-up fix: explicit state file is AUTHORITATIVE over the CLAUDE_ULTRACODE env
+# (carbonet-dashboards bug — /ultracode off was a no-op when the harness injected
+# the env var). Assertions run in the MAIN shell so failures actually count; env is
+# scoped to each `bash -c` subprocess, which also exercises bash 3.2 portability.
+mkdir -p "$HOME/.claude/session-state"; UCF="$HOME/.claude/session-state/ultracode-state.json"
+# explicit {"active":false} overrides a truthy env (the /ultracode off fix)
+echo '{"active":false}' > "$UCF"
+r="$(CLAUDE_ULTRACODE=1 bash -c 'source "'"$LIB"'"; loop_ultracode_active && echo on || echo off')"
+[[ "$r" == "off" ]] && ok "ultracode: state off overrides env on" || bad "ultracode state-off-vs-env=$r"
+echo '{"active":true}' > "$UCF"
+r="$(bash -c 'unset CLAUDE_ULTRACODE; source "'"$LIB"'"; loop_ultracode_active && echo on || echo off')"
+[[ "$r" == "on" ]] && ok "ultracode: state on (no env)" || bad "ultracode state-on=$r"
+rm -f "$UCF"
+r="$(CLAUDE_ULTRACODE=ON bash -c 'source "'"$LIB"'"; loop_ultracode_active && echo on || echo off')"
+[[ "$r" == "on" ]] && ok "ultracode: uppercase env via portable lowercase" || bad "ultracode uppercase-env=$r"
+rm -f "$UCF"
+# SECURITY (blocker fix): a present-but-empty / {} / malformed file is NOT
+# authoritative-OFF — that would let a dropped blank file silently disable the
+# design-gate. It falls through to env, so the gate stays ON when env is truthy.
+: > "$UCF"
+r="$(CLAUDE_ULTRACODE=1 bash -c 'source "'"$LIB"'"; loop_ultracode_active && echo on || echo off')"
+[[ "$r" == "on" ]] && ok "ultracode: empty file not authoritative (env wins)" || bad "ultracode empty-file=$r"
+echo '{}' > "$UCF"
+r="$(CLAUDE_ULTRACODE=1 bash -c 'source "'"$LIB"'"; loop_ultracode_active && echo on || echo off')"
+[[ "$r" == "on" ]] && ok "ultracode: {} (no boolean .active) not authoritative" || bad "ultracode empty-obj=$r"
+printf 'not json{' > "$UCF"
+r="$(CLAUDE_ULTRACODE=1 bash -c 'source "'"$LIB"'"; loop_ultracode_active && echo on || echo off')"
+[[ "$r" == "on" ]] && ok "ultracode: malformed file not authoritative" || bad "ultracode malformed=$r"
+echo '{}' > "$UCF"
+r="$(bash -c 'unset CLAUDE_ULTRACODE; source "'"$LIB"'"; loop_ultracode_active && echo on || echo off')"
+[[ "$r" == "off" ]] && ok "ultracode: {} + no env -> off (default)" || bad "ultracode empty-obj-noenv=$r"
+rm -f "$UCF"
 [[ "$(loop_effective_ceiling checkpoint true)"          == "bounded-checkpoint"  ]] && ok "ceiling: checkpoint+1"  || bad "ceiling cp"
 [[ "$(loop_effective_ceiling bounded-checkpoint true)"  == "bounded-autonomous"  ]] && ok "ceiling: bchk+1"       || bad "ceiling bchk"
 [[ "$(loop_effective_ceiling bounded-autonomous true)"  == "bounded-autonomous"  ]] && ok "ceiling: capped"       || bad "ceiling cap"
