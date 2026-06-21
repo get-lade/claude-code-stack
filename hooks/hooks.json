@@ -26,13 +26,15 @@
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bulk-job-reminder.sh" },
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/irreversible-deny.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/irreversible-deny.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loop-cost-monitor.sh" }
         ]
       },
       {
         "matcher": "Agent",
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-log.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-log.sh" },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loop-cost-monitor.sh" }
         ]
       },
       {

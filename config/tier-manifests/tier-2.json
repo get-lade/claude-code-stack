@@ -47,7 +47,8 @@
       { "from": "skills/ultracode/SKILL.md", "to": "~/.claude/skills/ultracode/SKILL.md" },
       { "from": "hooks/loop-stop.sh", "to": "~/.claude/hooks/loop-stop.sh", "executable": true },
       { "from": "hooks/irreversible-deny.sh", "to": "~/.claude/hooks/irreversible-deny.sh", "executable": true },
-      { "from": "scripts/lib/cross-family-preflight.sh", "to": "~/.claude/scripts/lib/cross-family-preflight.sh", "executable": true }
+      { "from": "scripts/lib/cross-family-preflight.sh", "to": "~/.claude/scripts/lib/cross-family-preflight.sh", "executable": true },
+      { "from": "hooks/loop-cost-monitor.sh", "to": "~/.claude/hooks/loop-cost-monitor.sh", "executable": true }
     ],
     "schemas": [
       { "from": "schemas/001-cost-log.sql", "apply_to_supabase": true }
@@ -102,6 +103,8 @@
     "test -f ~/.claude/skills/loop-engineer/loop_lib.sh",
     "test -f ~/.claude/skills/ultracode/SKILL.md",
     "test -x ~/.claude/hooks/irreversible-deny.sh",
+    "test -x ~/.claude/hooks/loop-cost-monitor.sh",
+    "jq -e '[.hooks.PreToolUse[]? | select(.matcher==\"Bash\") | .hooks[]? | select(.command | test(\"loop-cost-monitor.sh\"))] | length >= 1' ~/.claude/settings.json",
     "jq -e '[.hooks.Stop[]?.hooks[]? | select(.command | test(\"loop-stop.sh\"))] | length >= 1' ~/.claude/settings.json",
     "jq -e '[.hooks.PreToolUse[]? | select(.matcher==\"Bash\") | .hooks[]? | select(.command | test(\"irreversible-deny.sh\"))] | length >= 1' ~/.claude/settings.json",
     "test -x ~/.claude/hooks/schema-deploy-gate.sh",

@@ -179,6 +179,25 @@ loop_accrue_cost() {
     '{event:"loop_iteration", loop_id:$lid, cost_usd:$d}' >>"$log" 2>/dev/null || true
 }
 
+# Phase-2 (b): live within-iteration cost for a loop. Sums cost_usd/cost across
+# all subagent-runs.jsonl rows tagged with this loop_id (optionally only those at
+# or after started_at when the row carries a .ts). This is the authoritative
+# mid-flight figure the live monitor compares to the budget — unlike the
+# between-iteration cost_so_far_usd snapshot, it does not wait for the Stop hook.
+# Prints a number (0 when no data). Fail-safe.
+loop_live_cost() {
+  local lid="${1:-}" since="${2:-}"
+  local log="${_loop_home}/.claude/logs/subagent-runs.jsonl"
+  [[ -z "$lid" || ! -f "$log" ]] && { echo 0; return 0; }
+  jq -rs --arg lid "$lid" --arg since "$since" '
+    [ .[]
+      | select(.loop_id == $lid)
+      | select( ($since == "") or ((.ts // "") == "") or (.ts >= $since) )
+      | ((.cost_usd // .cost // 0) | tonumber? // 0)
+    ] | add // 0
+  ' "$log" 2>/dev/null || echo 0
+}
+
 # ---------------------------------------------------------------------------
 # Ultracode signal (Phase 2 / spec open-question 1)
 # ---------------------------------------------------------------------------

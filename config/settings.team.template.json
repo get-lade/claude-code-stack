@@ -35,6 +35,10 @@
           },
           {
             "type": "command",
+            "command": "~/.claude/hooks/loop-cost-monitor.sh"
+          },
+          {
+            "type": "command",
             "command": "~/.claude/hooks/schema-deploy-gate.sh"
           }
         ]
@@ -58,6 +62,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/override-log.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/loop-cost-monitor.sh"
           }
         ]
       },

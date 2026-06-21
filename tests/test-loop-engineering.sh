@@ -559,4 +559,36 @@ rm -f "$HOME/.claude/session-state/ultracode-state.json" 2>/dev/null
 [[ "$(loop_effective_ceiling bounded-autonomous true)"  == "bounded-autonomous"  ]] && ok "ceiling: capped"       || bad "ceiling cap"
 [[ "$(loop_effective_ceiling checkpoint false)"         == "checkpoint"          ]] && ok "ceiling: off=identity" || bad "ceiling off"
 
+# --- Task 4: live mid-flight cost monitor ---
+MON="$REPO_ROOT/hooks/loop-cost-monitor.sh"
+[[ -x "$MON" ]] && ok "monitor: hook executable" || bad "monitor: not executable"
+run_mon() { LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$MON" <<< "$1"; }
+
+# loop_live_cost sums rows for the matching loop_id only
+mkdir -p "$HOME/.claude/logs"
+LOG="$HOME/.claude/logs/subagent-runs.jsonl"
+: > "$LOG"
+printf '%s\n' '{"event":"loop_iteration","loop_id":"L1","cost_usd":1.5}' >> "$LOG"
+printf '%s\n' '{"event":"loop_iteration","loop_id":"L1","cost_usd":2.0}' >> "$LOG"
+printf '%s\n' '{"event":"loop_iteration","loop_id":"OTHER","cost_usd":99}' >> "$LOG"
+lc="$(loop_live_cost L1)"
+awk -v v="$lc" 'BEGIN{exit !(v==3.5)}' && ok "monitor: live cost sums loop_id" || bad "live cost got=$lc"
+
+# active loop over budget -> deny + status budget_exceeded
+loop_write_state '{"active":true,"loop_id":"L1","bounds":{"per_run_budget_usd":3,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+out="$(run_mon '{"tool_name":"Bash"}')"
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1 && ok "monitor: over budget -> deny" || bad "monitor over-budget out=$out"
+[[ "$(loop_read_state | jq -r '.status')" == "budget_exceeded" ]] && ok "monitor: marks budget_exceeded" || bad "monitor status not set"
+
+# under budget -> allow (empty)
+loop_write_state '{"active":true,"loop_id":"L1","bounds":{"per_run_budget_usd":100,"max_iterations":99},"cost_so_far_usd":0,"started_at":"2000-01-01T00:00:00Z"}'
+out="$(run_mon '{"tool_name":"Bash"}')"
+[[ -z "$out" ]] && ok "monitor: under budget -> allow" || bad "monitor under-budget out=$out"
+
+# no active loop -> allow
+loop_write_state '{"active":false,"loop_id":"L1","bounds":{"per_run_budget_usd":1}}'
+out="$(run_mon '{"tool_name":"Bash"}')"
+[[ -z "$out" ]] && ok "monitor: inactive -> allow" || bad "monitor inactive out=$out"
+: > "$LOG"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
