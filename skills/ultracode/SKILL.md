@@ -19,10 +19,15 @@ tier ceiling already is.
 
 It is deliberately **not** persisted in `stack-config.json`: it is a per-session
 opt-in so an elevated ceiling never silently outlives the session that asked for
-it. Two signals are honored (either turns it on):
+it. Precedence (explicit user intent beats an ambient env var):
 
-- env `CLAUDE_ULTRACODE` ∈ `1|true|on|yes`, or
-- session-state flag `~/.claude/session-state/ultracode-state.json` → `{"active":true}`.
+1. **State file is authoritative.** If
+   `~/.claude/session-state/ultracode-state.json` exists, it decides:
+   `{"active":true}` → ON, anything else → OFF. This holds **even if**
+   `CLAUDE_ULTRACODE` is truthy in the environment — so `/ultracode off` always
+   works, including when the harness/SDK injects the env var into the hook runtime.
+2. **Env is the fallback** only when no state file exists: env
+   `CLAUDE_ULTRACODE` ∈ `1|true|on|yes` turns it on.
 
 ## Usage
 
@@ -56,10 +61,13 @@ it. Two signals are honored (either turns it on):
 
 4. **off:**
    ```bash
+   mkdir -p "$STATE_DIR"
    printf '{"active":false}\n' > "$FILE"
    ```
-   (If `CLAUDE_ULTRACODE` is set in the env, warn that the env var still forces
-   it on for this shell — unset it to fully disable.)
+   This is authoritative: the explicit `{"active":false}` state overrides a
+   truthy `CLAUDE_ULTRACODE` env var, so the gate is reliably disabled for the
+   session (no need to unset the env var). Optionally mention the env var is being
+   overridden so a surprising prior state is explainable.
 
 ## What this does NOT do
 

@@ -21,11 +21,12 @@ Turn loop telemetry into tuning decisions. You report; the human applies.
 
 2. **Show per-pattern stats.**
    ```bash
-   loop_stats | jq .
+   loop_stats_table
    ```
-   If `[]`, say "No loop history yet — run some governed loops first" and stop.
-   Render a compact table: pattern · runs · met% · budget_exceeded% · iter_cap% ·
-   p50/p95 iterations · avg $.
+   This prints an aligned table with columns: pattern · runs · met% · budget% ·
+   iter_cap% · p50 · p95 · avg $. If it prints **nothing**, say "No loop history
+   yet — run some governed loops first" and stop. (`loop_stats | jq .` remains
+   available for the raw JSON.)
 
 3. **Propose calibration.** Read the current ceiling from
    `.claude/stack-config.json` (`loop_policy.max_iterations`, default 25), then:

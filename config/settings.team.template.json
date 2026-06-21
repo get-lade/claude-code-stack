@@ -79,6 +79,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/workflow-roster-check.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/loop-cost-monitor.sh"
           }
         ]
       },
@@ -99,6 +103,15 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/subagent-complete-log.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/loop-cost-accrual.sh"
           }
         ]
       }

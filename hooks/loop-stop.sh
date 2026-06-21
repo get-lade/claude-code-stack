@@ -112,6 +112,13 @@ fi
 _PREV_COST="$(echo "$STATE" | jq -r '.cost_so_far_usd // 0' 2>/dev/null)"
 [[ "$_PREV_COST" =~ ^[0-9]+(\.[0-9]+)?$ ]] || _PREV_COST=0
 _NEW_COST="$(awk -v a="$_ITER_COST" -v b="$_PREV_COST" 'BEGIN{printf "%.6f", a+b}' 2>/dev/null)" || _NEW_COST="$_PREV_COST"
+# ADR-024: fold in real per-tool spend (loop_tool_cost rows accrued by
+# loop-cost-accrual.sh) so the budget bound below is a TRUE hard cap, not just a
+# loop_iteration estimate. loop_live_cost is a total-since-start over all
+# loop-tagged cost rows, so take the max — never additive — to avoid double count.
+_LIVE_COST="$(loop_live_cost "$_LOOP_ID" "$_STARTED" 2>/dev/null || echo 0)"
+[[ "$_LIVE_COST" =~ ^[0-9]+(\.[0-9]+)?$ ]] || _LIVE_COST=0
+awk -v a="$_NEW_COST" -v b="$_LIVE_COST" 'BEGIN{exit !(b>a)}' && _NEW_COST="$_LIVE_COST"
 STATE="$(echo "$STATE" | jq -c --argjson c "$_NEW_COST" '.cost_so_far_usd=$c' 2>/dev/null)" || true
 
 # 3) Advance iteration + hash, then check bounds on the advanced state.

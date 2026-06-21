@@ -185,6 +185,14 @@ loop_accrue_cost() {
 # mid-flight figure the live monitor compares to the budget — unlike the
 # between-iteration cost_so_far_usd snapshot, it does not wait for the Stop hook.
 # Prints a number (0 when no data). Fail-safe.
+#
+# Event semantics (ADR-024): this intentionally sums ALL loop-tagged cost rows
+# regardless of event. The two cost-bearing events are DISJOINT spend segments,
+# never overlapping, so the sum is correct (not double-counted):
+#   - loop_tool_cost  (loop-cost-accrual.sh) — real per-tool token cost, the only
+#                       per-call cost source in normal operation.
+#   - loop_iteration  (loop_accrue_cost)     — legacy between-iteration estimate,
+#                       written only if a caller explicitly accrues one.
 loop_live_cost() {
   local lid="${1:-}" since="${2:-}"
   local log="${_loop_home}/.claude/logs/subagent-runs.jsonl"
@@ -207,9 +215,21 @@ loop_live_cost() {
 loop_runs_record() {
   local state="${1:-}"
   [[ -z "$state" ]] && return 0
+  # Phase-3 polish (ADR-024): record REAL spend. cost_so_far_usd is the
+  # between-iteration snapshot; loop_live_cost sums the per-tool loop_tool_cost
+  # rows accrued by loop-cost-accrual.sh. Take the larger so /loop-review's avg $
+  # reflects actual per-tool cost, not just the snapshot. Fail-safe -> snapshot.
+  local _lid _started _snap _live _cost
+  _lid="$(echo "$state" | jq -r '.loop_id // empty' 2>/dev/null)"
+  _started="$(echo "$state" | jq -r '.started_at // empty' 2>/dev/null)"
+  _snap="$(echo "$state" | jq -r '.cost_so_far_usd // 0' 2>/dev/null)"
+  [[ "$_snap" =~ ^[0-9]+(\.[0-9]+)?$ ]] || _snap=0
+  _live="$(loop_live_cost "$_lid" "$_started" 2>/dev/null || echo 0)"
+  [[ "$_live" =~ ^[0-9]+(\.[0-9]+)?$ ]] || _live=0
+  _cost="$(awk -v a="$_snap" -v b="$_live" 'BEGIN{printf "%.6f", (a>b?a:b)}' 2>/dev/null)" || _cost="$_snap"
   # Build the row from loop-state fields.
   local row
-  row="$(echo "$state" | jq -c '{
+  row="$(echo "$state" | jq -c --argjson cost "${_cost:-0}" '{
     loop_id:         (.loop_id // "loop"),
     session_id:      (env.CLAUDE_CODE_SESSION_ID // null),
     pattern:         (.pattern // null),
@@ -218,7 +238,7 @@ loop_runs_record() {
     status:          (.status // "unknown"),
     iterations:      (.iteration // 0),
     recursion_depth: (.recursion_depth // 0),
-    cost_usd:        (.cost_so_far_usd // 0),
+    cost_usd:        $cost,
     started_at:      (.started_at // null),
     ended_at:        (now | todateiso8601)
   }' 2>/dev/null)" || return 0
@@ -261,6 +281,37 @@ loop_stats() {
         avg_cost_usd:         (((map(.cost_usd // 0) | add) / length) | (.*1000000|round)/1000000)
       })
   ' "$log" 2>/dev/null || echo '[]'
+}
+
+# Phase-3 polish (ADR-024): render loop_stats as an aligned text table for
+# /loop-review (so rendering is deterministic, not left to model discretion).
+# Same source as loop_stats (optional log-path arg). Empty history -> prints
+# nothing (the caller emits the "no history" message). Fail-safe: any error ->
+# prints nothing.
+loop_stats_table() {
+  local stats; stats="$(loop_stats "${1:-}")"
+  [[ -z "$stats" || "$stats" == "[]" ]] && return 0
+  local fmt='%-14s %5s %6s %8s %8s %5s %5s %9s\n'
+  {
+    # shellcheck disable=SC2059
+    printf "$fmt" PATTERN RUNS MET% BUDGET% ITERCAP% P50 P95 'AVG$'
+    echo "$stats" | jq -r '
+      def r1: (.*10|round)/10;
+      .[] | [
+        (.pattern // "unknown"),
+        (.runs // 0),
+        ((.met_pct // 0)             | r1),
+        ((.budget_exceeded_pct // 0) | r1),
+        ((.iter_cap_pct // 0)        | r1),
+        (.p50_iterations // 0),
+        (.p95_iterations // 0),
+        (.avg_cost_usd // 0)
+      ] | @tsv' 2>/dev/null \
+    | while IFS=$'\t' read -r pat runs met bud cap p50 p95 avg; do
+        # shellcheck disable=SC2059
+        printf "$fmt" "$pat" "$runs" "$met" "$bud" "$cap" "$p50" "$p95" "$avg"
+      done
+  } 2>/dev/null || return 0
 }
 
 # Propose (print only — never auto-apply) a loop_policy.max_iterations bump per
@@ -340,14 +391,28 @@ loop_record_correction() {
 # env (CLAUDE_ULTRACODE) or the /ultracode skill's session-state flag.
 # Returns rc 0 when active, rc 1 otherwise. Fail-safe: any error -> inactive.
 loop_ultracode_active() {
-  local v="${CLAUDE_ULTRACODE:-}"
-  case "${v,,}" in
+  # Explicit per-session state (set by /ultracode) is AUTHORITATIVE and overrides
+  # any ambient CLAUDE_ULTRACODE the harness/SDK may inject into the hook runtime,
+  # so `/ultracode off` reliably disables the gate. But it is authoritative ONLY
+  # when .active is an explicit boolean: a present-but-empty / malformed / no-.active
+  # file is NOT authoritative and falls through to the env signal. This is
+  # deliberate — the design-gate enforces only while ON, so treating a blank/garbage
+  # file as OFF would silently disable enforcement (fail-open). Falling through to
+  # env fails TOWARD enforcing. The env var is the fallback when no explicit state
+  # exists. Fail-safe: any jq error -> not authoritative -> env fallback.
+  local f="${LOOP_STATE_DIR:-${_loop_home}/.claude/session-state}/ultracode-state.json"
+  if [[ -f "$f" ]]; then
+    case "$(jq -r 'if (.active|type)=="boolean" then (.active|tostring) else "none" end' "$f" 2>/dev/null)" in
+      true)  return 0 ;;
+      false) return 1 ;;   # explicit /ultracode off -> OFF, overrides truthy env
+      *)     : ;;          # empty/malformed/no boolean .active -> fall through to env
+    esac
+  fi
+  # No authoritative state -> fall back to the env signal. Portable lowercase:
+  # macOS default bash is 3.2, which lacks the ${v,,} expansion.
+  case "$(printf '%s' "${CLAUDE_ULTRACODE:-}" | tr '[:upper:]' '[:lower:]')" in
     1|true|on|yes) return 0 ;;
   esac
-  local f="${LOOP_STATE_DIR}/ultracode-state.json"
-  if [[ -f "$f" ]]; then
-    [[ "$(jq -r '.active // false' "$f" 2>/dev/null)" == "true" ]] && return 0
-  fi
   return 1
 }
 
