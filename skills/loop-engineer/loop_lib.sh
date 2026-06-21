@@ -392,10 +392,11 @@ loop_record_correction() {
 # Returns rc 0 when active, rc 1 otherwise. Fail-safe: any error -> inactive.
 loop_ultracode_active() {
   local v="${CLAUDE_ULTRACODE:-}"
-  case "${v,,}" in
-    1|true|on|yes) return 0 ;;
+  # bash 3.2 (macOS default) lacks ${v,,}; match case-insensitively instead.
+  case "$v" in
+    1|[Tt][Rr][Uu][Ee]|[Oo][Nn]|[Yy][Ee][Ss]) return 0 ;;
   esac
-  local f="${LOOP_STATE_DIR}/ultracode-state.json"
+  local f="${LOOP_STATE_DIR:-${HOME:-/tmp}/.claude/session-state}/ultracode-state.json"
   if [[ -f "$f" ]]; then
     [[ "$(jq -r '.active // false' "$f" 2>/dev/null)" == "true" ]] && return 0
   fi

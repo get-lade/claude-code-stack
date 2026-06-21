@@ -8,12 +8,17 @@ command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not found"; exit 0; }
 
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); echo "  ok: $1"; }
-bad()  { FAIL=$((FAIL+1)); echo "FAIL: $1"; }
+bad()  { FAIL=$((FAIL+1)); echo "FAIL: $1"; printf '%s\n' "$1" >>"$_fail_log"; }
 
 # Isolate state dir per run; guard mktemp failure; clean up on exit.
 _tmp_home="$(mktemp -d)" || { echo "FAIL: mktemp failed"; exit 1; }
 trap 'rm -rf "$_tmp_home"' EXIT
 export HOME="$_tmp_home"
+# Regression (pre-existing, not ADR-024): asserts written as `... | { read; ok||bad; }`
+# run bad() in a pipeline subshell, so the parent FAIL counter never saw them and the
+# summary printed FAIL=0 while real "FAIL:" lines existed (CI reported green). Tally
+# failures into a shared file that survives subshells; derive authoritative FAIL below.
+_fail_log="$_tmp_home/.faillog"; : >"$_fail_log"
 # ADR-020: state is keyed by session id. Neutralize a leaked session id from the
 # parent (real) Claude session so the legacy-path tests below are deterministic;
 # the per-session behavior is exercised explicitly in the isolation block.
@@ -859,4 +864,5 @@ out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.cla
 [[ -z "$out" ]] && ok "nudge: non-stack dir -> silent" || bad "nudge non-stack out=$out"
 rm -rf "$NPROJ" "$NHOME"
 
-echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]
+FAIL="$(wc -l <"$_fail_log" | tr -d '[:space:]')"
+echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ "$FAIL" -eq 0 ]]
