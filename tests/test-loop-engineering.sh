@@ -647,4 +647,26 @@ out="$(CLAUDE_ULTRACODE=1 run_gate '{"tool_input":{"file_path":"skills/foo/bar.s
 [[ -z "$out" ]] && ok "gate: approved marker -> allow" || bad "gate marker out=$out"
 rm -f "$HOME/.claude/session-state/design-approved.json"
 
+# ============================================================================
+# Phase 3 — observability, smarter control, authoring path
+# ============================================================================
+
+# --- T6: durable corrections ---
+CORR="$HOME/.claude/session-state/loop-corrections.jsonl"
+rm -f "$CORR" 2>/dev/null
+loop_record_correction '{"loop_id":"C1","status":"no_progress","goal":"make tests pass","iteration":4}' "exited no_progress with goal unmet"
+[[ -f "$CORR" ]] && ok "corrections: row appended" || bad "corrections: no file"
+[[ "$(jq -r 'select(.loop_id=="C1") | .status' "$CORR" 2>/dev/null | tail -1)" == "no_progress" ]] && ok "corrections: status captured" || bad "corrections: status wrong"
+[[ "$(jq -r 'select(.loop_id=="C1") | .resolved' "$CORR" 2>/dev/null | tail -1)" == "false" ]] && ok "corrections: unresolved by default" || bad "corrections: resolved flag"
+[[ "$(jq -r 'select(.loop_id=="C1") | .hint' "$CORR" 2>/dev/null | tail -1)" == *"goal unmet"* ]] && ok "corrections: hint captured" || bad "corrections: hint missing"
+# empty arg -> no-op rc 0
+loop_record_correction "" ; [[ $? -eq 0 ]] && ok "corrections: empty arg no-op" || bad "corrections empty"
+# Stop-hook records a correction on a bound-trip exit (no_progress), NOT on met.
+rm -f "$CORR" 2>/dev/null
+( export CLAUDE_CODE_SESSION_ID="corrSess"
+  loop_write_state '{"active":true,"loop_id":"SH1","iteration":1,"bounds":{"max_iterations":1},"success_criterion":{"type":"shell","command":"false"},"started_at":"2999-01-01T00:00:00Z","no_progress_count":0,"cost_so_far_usd":0}'
+  LOOP_STATE_DIR="$HOME/.claude/session-state" bash "$STOP" <<< '{"stop_hook_active":false,"session_id":"corrSess"}' >/dev/null 2>&1 )
+[[ -f "$CORR" ]] && [[ -n "$(jq -r 'select(.loop_id=="SH1")' "$CORR" 2>/dev/null)" ]] && ok "corrections: stop-hook records bound-trip" || bad "corrections: stop-hook missing"
+rm -f "$CORR" "$HOME/.claude/session-state/loop-state.corrSess.json" 2>/dev/null
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

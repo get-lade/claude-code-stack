@@ -241,6 +241,30 @@ loop_runs_record() {
   return 0
 }
 
+# Phase-3 (spec §6.7): durable corrections. When a loop exits without meeting its
+# goal (no_progress / escalated / a bound trip), append a structured note so the
+# lesson compounds — /handoff folds unresolved corrections into the next session.
+# Always-on local append; fail-safe (never crashes the Stop hook).
+# Usage: loop_record_correction '<loop-state-json>' [hint]
+loop_record_correction() {
+  local state="${1:-}" hint="${2:-}"
+  [[ -z "$state" ]] && return 0
+  local row
+  row="$(echo "$state" | jq -c --arg hint "$hint" '{
+    ts:       (now | todateiso8601),
+    loop_id:  (.loop_id // "loop"),
+    status:   (.status // "unknown"),
+    goal:     (.goal // null),
+    iteration:(.iteration // 0),
+    hint:     (if $hint == "" then null else $hint end),
+    resolved: false
+  }' 2>/dev/null)" || return 0
+  [[ -z "$row" ]] && return 0
+  local f="${LOOP_STATE_DIR}/loop-corrections.jsonl"
+  mkdir -p "$LOOP_STATE_DIR" 2>/dev/null && printf '%s\n' "$row" >>"$f" 2>/dev/null || true
+  return 0
+}
+
 # ---------------------------------------------------------------------------
 # Ultracode signal (Phase 2 / spec open-question 1)
 # ---------------------------------------------------------------------------

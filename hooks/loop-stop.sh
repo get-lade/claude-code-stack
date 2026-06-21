@@ -122,6 +122,11 @@ if [[ "$TRIP" != "ok" ]]; then
   _FINAL="$(echo "$STATE" | jq -c --arg s "$TRIP" '.active=false | .status=$s')"
   loop_write_state "$_FINAL" 2>/dev/null || true
   loop_runs_record "$_FINAL" 2>/dev/null || true   # Phase-2 telemetry
+  # Phase-3 (spec §6.7): a goal-unmet exit is a lesson — capture it for /handoff.
+  case "$TRIP" in
+    no_progress|max_iterations|max_recursion_depth|budget_exceeded|timeout)
+      loop_record_correction "$_FINAL" "exited $TRIP with goal unmet" 2>/dev/null || true ;;
+  esac
   exit 0   # bound tripped -> allow stop (escalation surfaced via status)
 fi
 
