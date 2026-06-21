@@ -54,6 +54,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/subagent-log.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/override-log.sh"
           }
         ]
       },
