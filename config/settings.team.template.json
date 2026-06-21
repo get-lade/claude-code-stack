@@ -17,6 +17,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/dispatch-nudge.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/loop-shape-nudge.sh"
           }
         ]
       }

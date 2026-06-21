@@ -1,8 +1,8 @@
 # Loop-Engineering Control Plane — Phase 3 Implementation Plan
 
-> **STATUS: PROPOSED.** Phases 1 (ADR-019/020, PR #37) and 2 (PR #42) are shipped.
-> Phase 3 is "observability + smarter control + authoring path." Precursor ADR:
-> **ADR-022** (loop-engineering Phase 3) — authored in Task 0.
+> **STATUS: COMPLETE (PR #42).** All tasks T0–T7 shipped; 159 loop tests + full
+> repo suite green; tier-1/2/3 installs pass (47/103/110). ADR-022 accepted. The
+> checkbox steps below are the as-built record.
 
 > **For agentic workers:** TDD task-by-task. Steps use checkbox (`- [ ]`) syntax.
 > Each task = test → fail → implement → pass → commit. Bash + `jq` + the existing

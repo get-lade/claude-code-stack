@@ -154,6 +154,15 @@ with `/plan` (open question 2): the gate **wraps** `/plan` — `/plan` writes th
 ## 11. Phasing (flagship — instrument alongside, not first)
 
 - **Phase 1:** `/loop-engineer` + pre-flight gate + Stop-hook + `irreversible-deny` + `loop_policy` (schema-migrated) + foreman routing + guardrails 1–8 + **per-run loop cost logging to `subagent-runs.jsonl` (instrument alongside)**. Vendored; cloud-compatible. **Phase 1 residuals (stated, not hidden):** (a) `irreversible-deny` is best-effort defense-in-depth with known bypasses (see §9); (b) cost accrual is advisory and between-iteration — `cost_so_far_usd` accrues from real log data scoped to this loop's id, but a within-iteration runaway is not halted until Phase 2; (c) `max_recursion_depth` is advisory — not runtime-enforced in Phase 1, `max_iterations` is the hard cap; (d) no-progress hash omits untracked-file byte-contents — only filenames appear in the hash (Phase-2 fix).
+- **Phase 3 (SHIPPED — PR #42, ADR-022):** telemetry feedback loop (`/loop-review`,
+  `loop_stats`/`loop_calibrate` — advisory, never auto-applies); real token-cost
+  signal in the live monitor (`loop_cost_from_usage` via `model-routing.json`);
+  per-path design-gate marker (`approved_paths`); 5-point `model_effort` enum
+  (legacy subset); vendored `using-superpowers` + `brainstorming` (text core);
+  durable corrections (`loop_record_correction` → `/handoff`); and
+  auto-enablement (`loop-shape-nudge.sh` → one-time onboarding, `/session` +
+  `/project-init` defaults). Out of scope: ToT/GoT patterns; brainstorming visual
+  server.
 - **Phase 2 (SHIPPED — PR #42):** Supabase `loop_runs` (Tier 3+, `schemas/004-loop-runs.sql`) + **live mid-flight cost monitor** (`hooks/loop-cost-monitor.sh`, closes the within-iteration gap) + telemetry (`loop_runs_record`, local JSONL always + Supabase when creds present) + the ultracode signal (`loop_ultracode_active`/`loop_effective_ceiling`/`/ultracode`). Also closed the Phase-1 residuals: `max_recursion_depth` is now a hard bound, and the no-progress hash folds untracked-file byte-contents. Deferred: 5-point effort-enum widening (kept `fast/balanced/max` per §3 open question). The design-before-code gate shipped separately as **ADR-021** (`hooks/design-gate.sh`).
 
 ## 12. Open questions

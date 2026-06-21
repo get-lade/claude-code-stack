@@ -772,4 +772,36 @@ done
 jq -e '[.files.global[]?.from | select(test("using-superpowers|brainstorming"))] | length == 2' "$REPO_ROOT/config/tier-manifests/tier-1.json" >/dev/null 2>&1 \
   && ok "vendor: tier-1 manifest copies both" || bad "vendor: manifest missing entries"
 
+# --- T7: auto-enablement loop-shape nudge ---
+NUDGE="$REPO_ROOT/hooks/loop-shape-nudge.sh"
+[[ -x "$NUDGE" ]] && ok "nudge: hook executable" || bad "nudge: not executable"
+# Build a throwaway Tier-2 stack project so the gate (Tier>=2) passes.
+NPROJ="$(mktemp -d)"; mkdir -p "$NPROJ/.claude"
+echo '{"stack_tier":2}' > "$NPROJ/.claude/stack-config.json"
+NHOME="$(mktemp -d)"; mkdir -p "$NHOME/.claude/session-state"
+run_nudge() { CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$1"; }
+mkpayload() { jq -nc --arg p "$1" --arg c "$NPROJ" '{prompt:$p, cwd:$c, session_id:"nudgeSess"}'; }
+
+# loop-shaped prompt, not onboarded -> emits the onboarding reminder
+out="$(run_nudge "$(mkpayload "refactor the parser and keep running until all tests pass")")"
+echo "$out" | grep -q 'Loop-shape detected' && ok "nudge: loop-shaped -> offers onboarding" || bad "nudge loop-shaped out=$out"
+# dedupe: second call same session -> silent
+out="$(run_nudge "$(mkpayload "keep going until the build is green")")"
+[[ -z "$out" ]] && ok "nudge: once-per-session dedupe" || bad "nudge dedupe out=$out"
+# fresh session but onboarded marker present -> silent
+echo '{"onboarded":true}' > "$NHOME/.claude/session-state/loop-onboarded.json"
+out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$(jq -nc --arg p "iterate until the eval threshold is met" --arg c "$NPROJ" '{prompt:$p,cwd:$c,session_id:"other"}')")"
+[[ -z "$out" ]] && ok "nudge: onboarded -> silent" || bad "nudge onboarded out=$out"
+rm -f "$NHOME/.claude/session-state/loop-onboarded.json"
+# one-shot / non-loop prompt -> silent
+out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$(jq -nc --arg p "fix the typo in the readme header" --arg c "$NPROJ" '{prompt:$p,cwd:$c,session_id:"s3"}')")"
+[[ -z "$out" ]] && ok "nudge: one-shot -> silent" || bad "nudge one-shot out=$out"
+# explain/read prompt with 'until' -> silent (negative guard)
+out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$(jq -nc --arg p "explain how the loop runs until the goal is met" --arg c "$NPROJ" '{prompt:$p,cwd:$c,session_id:"s4"}')")"
+[[ -z "$out" ]] && ok "nudge: explain -> silent" || bad "nudge explain out=$out"
+# non-stack dir -> silent
+out="$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" HOME="$NHOME" LOOP_STATE_DIR="$NHOME/.claude/session-state" bash "$NUDGE" <<< "$(jq -nc --arg p "keep iterating until tests pass please" --arg c "$(mktemp -d)" '{prompt:$p,cwd:$c,session_id:"s5"}')")"
+[[ -z "$out" ]] && ok "nudge: non-stack dir -> silent" || bad "nudge non-stack out=$out"
+rm -rf "$NPROJ" "$NHOME"
+
 echo "---"; echo "PASS=$PASS FAIL=$FAIL"; [[ $FAIL -eq 0 ]]

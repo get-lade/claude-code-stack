@@ -29,6 +29,7 @@ value first (marked "(current)"). Keep it to these six:
 | **Explanation verbosity** | minimal · normal · teaching |
 | **Orchestration mode** | main-thread · hybrid · agent-teams · dynamic-workflows |
 | **Cost-alert sensitivity** | relaxed · normal · strict |
+| **Governed loops** | off · checkpoint · bounded-checkpoint · bounded-autonomous (clamped to tier ceiling) |
 | **Passive capability suggestions** | on (default) · off — controls whether the dispatch nudge appends a pointer to the recommend-capabilities engine; the routing nudge itself always shows |
 
 Style → brevity budget (what the user is really choosing): terse ≈ 70 words /
@@ -59,6 +60,12 @@ off → `false`** (unquoted — the hook compares the literal `false`; a quoted
 `mkdir -p ~/.claude/session-state` first. This takes effect immediately:
 `brevity-drift.sh` reads `communication_style` on the next turn, and you (the
 assistant) honor effort/verbosity/orchestration directly for the session.
+
+**Governed loops (ADR-022):** the loop choice sets `loop_policy.default_autonomy`
+(via `/stack-config`; `off` ⇒ checkpoint floor) and always writes
+`~/.claude/session-state/loop-onboarded.json` so the loop-shape nudge stops
+offering. This is also the onboarding the `loop-shape-nudge.sh` hook points
+first-time users to.
 
 ### 4. Offer to persist (opt-in)
 
