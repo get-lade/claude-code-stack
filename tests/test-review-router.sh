@@ -24,6 +24,11 @@ export HOME="$TMP/home"
 mkdir -p "$HOME/.claude/logs"
 LOG="$HOME/.claude/logs/subagent-runs.jsonl"
 
+# Deterministic local-model availability: existing routine assertions assume the
+# local engine is usable (env-independent — CI has no ollama). Section 10
+# overrides this per-test to exercise the cloud fallback.
+export REVIEW_ASSUME_LOCAL=1
+
 # --- a throwaway git repo with a base commit on main + a feature branch -------
 # build_repo <changed_file_path> : commits base, then a feature commit changing
 # the given path; leaves HEAD on the feature branch. Echoes nothing.
@@ -152,6 +157,18 @@ CFGC="$TMP/claude-routing.json"
 echo '{ "review_tiers": { "high": { "model": "claude-sonnet-4-6" } } }' > "$CFGC"
 assert_eq "config Claude model refused -> default" "gpt-5.5" "$(resolve RR_CONFIG="$CFGC")"
 assert_eq "non-Claude override still passes through" "gpt-5.4" "$(resolve REVIEW_HIGH_MODEL=gpt-5.4)"
+
+# --- 10. cloud-safety: local engine falls back to escalation when ollama absent
+R="$(build_repo docs/notes.md)"
+assert_eq "no local model -> routine falls back to codex/gpt-5.4" \
+  "codex|gpt-5.4|medium|diff|" "$(eval_vars "$R" REVIEW_ASSUME_NO_LOCAL=1)"
+fb="$( cd "$R"; env REVIEW_ASSUME_NO_LOCAL=1 bash -c "source '$LIB'; rr_run x main HEAD >/dev/null; echo \$RR_LOCAL_FALLBACK" )"
+case "$fb" in yes*) pass "RR_LOCAL_FALLBACK flag set when local unavailable" ;; *) fail "RR_LOCAL_FALLBACK flag set when local unavailable (got '$fb')" ;; esac
+assert_eq "local available -> stays local (no fallback)" \
+  "local|qwen2.5-coder:32b|n/a|diff|gpt-5.4" "$(eval_vars "$R" REVIEW_ASSUME_LOCAL=1)"
+R="$(build_repo src/auth/login.ts)"
+assert_eq "high tier unaffected by local availability" \
+  "codex|gpt-5.5|high|diff|" "$(eval_vars "$R" REVIEW_ASSUME_NO_LOCAL=1)"
 
 echo "----------------------------------------"
 echo "review-router: PASS=$PASS FAIL=$FAIL"

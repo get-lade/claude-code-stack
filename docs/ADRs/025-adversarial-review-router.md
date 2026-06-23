@@ -94,6 +94,15 @@ runs regardless of tier — tiering only changes Pass 1's engine. ADR-022 prefli
 still gates the Codex tiers (high, routine-escalation); a routine review may
 proceed on local Qwen even when the OpenAI path is BLOCKED.
 
+**Cloud-safety (added in the propagation follow-up):** cloud/CI sessions have no
+ollama, so `rr_run` detects a missing local model (`rr_local_available`) and
+transparently routes the routine tier to the escalation engine (`codex/gpt-5.4`
+via `OPENAI_API_KEY`, ADR-015), flagging `RR_LOCAL_FALLBACK=yes`. The same
+follow-up registered `scripts/lib/review-router.sh` in the tier-2 install manifest
+— the original PR shipped the lib + agent references but not the manifest entry,
+so a fresh install/update would not have copied it and the agents' `source` would
+fail. Caught by a post-merge propagation check, not by tests.
+
 **Out of scope:** Gemini roles (architecture-critic, red-team, historian) bill on
 a separate CLI account; their cost is pending the console number and the scope
 fix barely applies (they intentionally want whole-repo context). Tracked
