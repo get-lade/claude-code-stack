@@ -153,6 +153,23 @@ rr_classify_stakes() {
   echo "routine no high-stakes paths in diff"
 }
 
+# --- local-model availability (cloud-safety) ----------------------------------
+
+# rr_local_available <model-tag> : is the local routine engine usable here?
+# Cloud / CI sessions have no ollama, so the `local` routine tier must transparently
+# fall back to the escalation engine (Codex) rather than fail. Test/CI determinism
+# via REVIEW_ASSUME_NO_LOCAL=1 (force unavailable) / REVIEW_ASSUME_LOCAL=1 (force
+# available); NO_LOCAL wins when both are set.
+rr_local_available() {
+  [[ "${REVIEW_ASSUME_NO_LOCAL:-}" == "1" ]] && return 1
+  [[ "${REVIEW_ASSUME_LOCAL:-}" == "1" ]] && return 0
+  command -v ollama >/dev/null 2>&1 || return 1
+  local model="$1" tags
+  tags="$(ollama list 2>/dev/null)" || return 0   # ollama present but list failed → don't over-block
+  [[ -z "$tags" ]] && return 0
+  grep -qF "$model" <<<"$tags"
+}
+
 # --- tier selection -----------------------------------------------------------
 
 rr_run() {
@@ -171,6 +188,7 @@ rr_run() {
   RR_ESC_ENGINE=""
   RR_ESC_MODEL=""
   RR_ESC_EFFORT=""
+  RR_LOCAL_FALLBACK="no"
 
   if [[ "$stakes" == "high" ]]; then
     RR_ENGINE="$(rr_resolve REVIEW_HIGH_ENGINE  '.review_tiers.high.engine'  codex)"
@@ -183,6 +201,15 @@ rr_run() {
     RR_ESC_ENGINE="$(rr_resolve REVIEW_ESCALATION_ENGINE '.review_tiers.routine.escalation_engine' codex)"
     RR_ESC_MODEL="$(rr_resolve  REVIEW_ESCALATION_MODEL  '.review_tiers.routine.escalation_model'  gpt-5.4)"
     RR_ESC_EFFORT="$(rr_resolve REVIEW_ESCALATION_EFFORT '.review_tiers.routine.escalation_effort' medium)"
+
+    # Cloud-safety: if the routine engine is local but ollama/the model isn't
+    # available here (cloud / CI), transparently route to the escalation engine
+    # (Codex via OPENAI_API_KEY, ADR-015) so routine reviews still run cross-family.
+    if [[ "$RR_ENGINE" == "local" ]] && ! rr_local_available "$RR_MODEL"; then
+      RR_ENGINE="$RR_ESC_ENGINE"; RR_MODEL="$RR_ESC_MODEL"; RR_EFFORT="$RR_ESC_EFFORT"
+      RR_LOCAL_FALLBACK="yes (local model unavailable → escalation engine)"
+      RR_ESC_ENGINE=""; RR_ESC_MODEL=""; RR_ESC_EFFORT=""
+    fi
   fi
 
   cat <<EOF
@@ -194,6 +221,7 @@ engine     : $RR_ENGINE
 model      : $RR_MODEL
 effort     : $RR_EFFORT
 scope      : $RR_SCOPE
+local-fallback : $RR_LOCAL_FALLBACK
 escalation : ${RR_ESC_ENGINE:-none}${RR_ESC_MODEL:+/$RR_ESC_MODEL}${RR_ESC_EFFORT:+@$RR_ESC_EFFORT} (routine only: on low-confidence / non-trivial diff)
 ===============================
 EOF

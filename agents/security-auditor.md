@@ -55,6 +55,8 @@ rr_run security-auditor   # sets RR_STAKES/RR_ENGINE/RR_MODEL/RR_EFFORT/RR_SCOPE
 - **`RR_STAKES=routine`** → Pass 1 on the LOCAL cross-family model first
   (`ollama run "$RR_MODEL"`, qwen2.5-coder:32b — non-Claude, satisfies ADR-011);
   escalate to Codex `$RR_ESC_MODEL` on any low-confidence or non-trivial finding.
+  **Cloud/CI (no ollama):** the router auto-sets `RR_ENGINE=codex`/`RR_MODEL=gpt-5.4`
+  (`RR_LOCAL_FALLBACK=yes`) — obey `RR_ENGINE`, don't hardcode `ollama`.
 - Scope to the DIFF (`$RR_SCOPE`=diff), not a whole-repo sweep.
 - **Pass 2 (Opus second pass) is UNCHANGED** — it still runs on novel
   crypto/auth/payment regardless of tier. Tiering only changes Pass 1's engine.

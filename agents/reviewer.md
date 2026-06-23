@@ -59,6 +59,10 @@ rr_run reviewer    # prints the tier block; sets RR_STAKES/RR_ENGINE/RR_MODEL/RR
   self-contradictory findings or the diff is non-trivial. A routine review may
   proceed on local Qwen even if Step-0 preflight is BLOCKED (OpenAI gates only
   the Codex tiers — high and routine-escalation).
+  **Cloud/CI (no ollama):** the router auto-detects the missing local model and
+  sets `RR_ENGINE=codex` / `RR_MODEL=gpt-5.4` (`RR_LOCAL_FALLBACK=yes`). Just obey
+  `RR_ENGINE`/`RR_MODEL` — don't hardcode `ollama`; routine then runs on Codex via
+  `OPENAI_API_KEY` (ADR-015).
 - **Always scope to the DIFF** (`$RR_SCOPE`=diff, `<base>..<head>`), never a
   whole-repo cold read — this is the biggest token lever.
 - After the review completes, log the route once:
