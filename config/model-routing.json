@@ -66,15 +66,15 @@
     "architect": { "primary": "anthropic/claude-opus-4-8" },
     "implementer": { "primary": "anthropic/claude-sonnet-4-6", "escalation": "anthropic/claude-opus-4-8" },
     "validator": { "primary": "anthropic/claude-sonnet-4-6", "escalation": "anthropic/claude-opus-4-8" },
-    "reviewer": { "primary": "codex/gpt-5.5", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: adversarial review via local Codex CLI — see ADR-011." },
+    "reviewer": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.4", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: adversarial review via local Codex CLI — see ADR-011. ADR-025: tiered by stakes via scripts/lib/review-router.sh — high-stakes diffs use codex/gpt-5.5@high; routine diffs use local Qwen first, escalate to codex/gpt-5.4. Both tiers stay cross-family (never Claude). Model IDs resolved from review_tiers below." },
     "tester": { "primary": "anthropic/claude-sonnet-4-6" },
     "documenter": { "primary": "anthropic/claude-sonnet-4-6" },
     "scribe": { "primary": "anthropic/claude-haiku-4-5-20251001" },
     "ops": { "primary": "anthropic/claude-haiku-4-5-20251001", "escalation": "anthropic/claude-sonnet-4-6" },
-    "product-critic": { "primary": "codex/gpt-5.5", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: product critique via local Codex CLI — see ADR-011." },
+    "product-critic": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.4", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: product critique via local Codex CLI — see ADR-011. ADR-025: tiered by stakes (review-router.sh); product critique is rarely high-stakes so usually routes routine (local Qwen). Cross-family preserved." },
     "designer": { "primary": "anthropic/claude-opus-4-8" },
     "red-team": { "primary": "gemini/gemini-2.5-pro", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: red-team analysis via local Gemini CLI — see ADR-012." },
-    "security-auditor": { "primary": "codex/gpt-5.5", "second_pass": "anthropic/claude-opus-4-8", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: primary audit via local Codex CLI; belt-and-suspenders Opus second pass on novel crypto/auth — see ADR-011." },
+    "security-auditor": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.4", "second_pass": "anthropic/claude-opus-4-8", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: primary audit via local Codex CLI; belt-and-suspenders Opus second pass on novel crypto/auth — see ADR-011. ADR-025: tiered by stakes (review-router.sh). Security work classifies high more often (security/auth/crypto paths → gpt-5.5@high); the Opus second pass on novel crypto/auth is UNCHANGED." },
     "performance-engineer": { "primary": "anthropic/claude-opus-4-8" },
     "data-engineer": { "primary": "anthropic/claude-opus-4-8" },
     "integration-specialist": { "primary": "anthropic/claude-sonnet-4-6" },
@@ -87,7 +87,26 @@
     "foreman-team-lead": { "primary": "anthropic/claude-opus-4-8", "notes": "v1.1: Used in agent-teams orchestration mode only. Main-thread mode uses foreman as a skill — no subagent invocation." },
     "local-ops": { "primary": "ollama/qwen2.5-coder:32b", "notes": "Tier 5 local subagent. Model string must match an ollama tag that tier-installer.sh actually pulls and HARDWARE.md recommends — keep these three in sync." }
   },
+  "review_tiers": {
+    "_doc": "ADR-025 adversarial-review router tiers. Read by scripts/lib/review-router.sh (env var > this block > built-in default). Repoint models here when the Tier-5 local box lands — no script edit. Every tier MUST be a non-Claude family (ADR-011 cross-family rule); never set a Claude model here.",
+    "high": {
+      "engine": "codex",
+      "model": "gpt-5.5",
+      "effort": "high",
+      "when": "diff touches auth/crypto/payment/migration/RLS/secret paths, or domain-mode security|schema-migration, or sensitivity=high"
+    },
+    "routine": {
+      "engine": "local",
+      "model": "qwen2.5-coder:32b",
+      "escalation_engine": "codex",
+      "escalation_model": "gpt-5.4",
+      "escalation_effort": "medium",
+      "when": "everything else; run local Qwen first, escalate to escalation_model only on low-confidence or non-trivial diff",
+      "tier5_note": "When the high-RAM/GPU box arrives, repoint model (and optionally escalation_model) to a larger local model — e.g. qwen2.5-coder:72b / kimi / deepseek-class. A strong enough local model can also absorb the high tier, driving OpenAI review spend toward $0. Track under the Tier-5 local-model expansion plan."
+    }
+  },
   "notes": [
+    "ADR-025: adversarial review (reviewer, security-auditor, product-critic) is tiered by stakes via scripts/lib/review-router.sh — high → codex/gpt-5.5@high; routine → local Qwen first, escalate codex/gpt-5.4. Scope fixed to the diff (base..head), not whole-repo. Routes log to subagent-runs.jsonl (event:review_route) to verify the high/routine split. Cross-family (ADR-011) holds on both tiers.",
     "v1.1.1 change: OpenAI/GPT-5.5-family work routes through the local Codex CLI (provider `codex`); Gemini-family work routes through the local Gemini CLI (provider `gemini`). Neither uses a direct API key. Adversarial roles run on a Claude model and orchestrate the respective CLI. See ADR-011 (Codex) and ADR-012 (Gemini).",
     "v1.1 change: Foreman is a skill (skills/foreman/SKILL.md) in main-thread orchestration mode. Only in agent-teams mode is foreman a separate session (team-lead role).",
     "Pricing verified against vendor docs on 2026-05-15. Anthropic: platform.claude.com. Apr 2026 friction was a 3.4x cost underforecast — verify live before any cost-sensitive operation.",

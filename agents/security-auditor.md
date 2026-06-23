@@ -33,19 +33,46 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh
 
 - **`READY`** → proceed.
 - **`BLOCKED_NETWORK` / `BLOCKED_NOCREDS` / `PROBE_SKIPPED`** → the Codex pass is
-  unavailable. Do **NOT** dead-stop. Go to "Graceful degradation" below.
+  unavailable. Do **NOT** dead-stop, and do **NOT** degrade yet — run Step 0.5
+  first: a `routine` audit runs on **local Qwen** and proceeds regardless of this
+  verdict. Go to "Graceful degradation" only when the routed tier is **Codex**
+  (high, or a routine escalation) AND the preflight is not `READY`. (The Opus
+  second pass on novel crypto/auth is independent of this verdict.)
+
+## Step 0.5 — route by stakes (ADR-025, run after preflight)
+
+Source the router and obey the tier. Security work hits the high-stakes paths
+(auth/crypto/secret/RLS/payment) far more often than other roles, so it
+classifies `high` most of the time — but a routine sweep (docs, config, a
+non-security refactor in a security-tagged repo) shouldn't pay gpt-5.5@high.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/review-router.sh"
+rr_run security-auditor   # sets RR_STAKES/RR_ENGINE/RR_MODEL/RR_EFFORT/RR_SCOPE/RR_ESC_*
+```
+
+- **`RR_STAKES=high`** → Pass 1 on Codex `$RR_MODEL` @ `$RR_EFFORT` (gpt-5.5@high).
+- **`RR_STAKES=routine`** → Pass 1 on the LOCAL cross-family model first
+  (`ollama run "$RR_MODEL"`, qwen2.5-coder:32b — non-Claude, satisfies ADR-011);
+  escalate to Codex `$RR_ESC_MODEL` on any low-confidence or non-trivial finding.
+- Scope to the DIFF (`$RR_SCOPE`=diff), not a whole-repo sweep.
+- **Pass 2 (Opus second pass) is UNCHANGED** — it still runs on novel
+  crypto/auth/payment regardless of tier. Tiering only changes Pass 1's engine.
+- After auditing, log the route: `rr_log_route security-auditor "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" "$RR_SCOPE" "<yes|no>"`.
 
 ## Your job
 
 For any code touching auth, data access, secrets, or external inputs:
 
-### Pass 1 — Codex (cross-family)
+### Pass 1 — cross-family (routed engine from Step 0.5, scoped to the diff)
 
-```bash
-codex exec "Security-audit the current changes. Sweep for: OWASP Top 10 (injection, broken auth, sensitive data exposure, etc.); hardcoded secrets (must be in env/Keychain, never in code); input validation on every external input; output sanitization; Supabase RLS coverage and policy correctness; crypto using current best-practice libraries; logging hygiene (no PII/secrets); error messages that don't leak internal state; auth flows with no bypass paths. Output findings as CRITICAL / HIGH / MEDIUM / LOW with file:line."
-```
+Run the audit prompt on the routed engine/model:
+- **high or escalation / Codex:** `codex exec -m "$RR_MODEL" -c model_reasoning_effort="$RR_EFFORT" "<audit prompt>"`
+- **routine / local:** `ollama run "$RR_MODEL"` with the same prompt, diff piped in.
 
-Capture Codex's output.
+Audit prompt (both engines): `"Security-audit the current changes (diff <base>..<head>). Sweep for: OWASP Top 10 (injection, broken auth, sensitive data exposure, etc.); hardcoded secrets (must be in env/Keychain, never in code); input validation on every external input; output sanitization; Supabase RLS coverage and policy correctness; crypto using current best-practice libraries; logging hygiene (no PII/secrets); error messages that don't leak internal state; auth flows with no bypass paths. Output findings as CRITICAL / HIGH / MEDIUM / LOW with file:line."`
+
+Capture the output.
 
 ### Pass 2 — belt-and-suspenders (Claude Opus)
 
@@ -102,7 +129,8 @@ Write `.claude/sessions/<session-id>/security-report.md`:
 # Security audit
 Date: <iso>
 Scope: <files / endpoints / DB objects>
-Passes: Codex (cross-family) + <Opus second pass: yes/no>
+Review tier (ADR-025): <high | routine> — Pass 1 engine <local/Qwen | codex>, model <RR_MODEL>, escalated <yes/no>
+Passes: Pass 1 cross-family (<engine>) + <Opus second pass: yes/no>
 Preflight (ADR-022): <READY | BLOCKED_NETWORK | BLOCKED_NOCREDS | PROBE_SKIPPED>
 Cross-family deviation: <no | YES — Claude-only pass, see Decision>
 
