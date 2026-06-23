@@ -35,17 +35,40 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh
 - **`BLOCKED_NETWORK` / `BLOCKED_NOCREDS` / `PROBE_SKIPPED`** → the Codex pass is
   unavailable. Do **NOT** dead-stop. Go to "Graceful degradation" below.
 
+## Step 0.5 — route by stakes (ADR-025, run after preflight)
+
+Source the router and obey the tier. Security work hits the high-stakes paths
+(auth/crypto/secret/RLS/payment) far more often than other roles, so it
+classifies `high` most of the time — but a routine sweep (docs, config, a
+non-security refactor in a security-tagged repo) shouldn't pay gpt-5.5@high.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/review-router.sh"
+rr_run security-auditor   # sets RR_STAKES/RR_ENGINE/RR_MODEL/RR_EFFORT/RR_SCOPE/RR_ESC_*
+```
+
+- **`RR_STAKES=high`** → Pass 1 on Codex `$RR_MODEL` @ `$RR_EFFORT` (gpt-5.5@high).
+- **`RR_STAKES=routine`** → Pass 1 on the LOCAL cross-family model first
+  (`ollama run "$RR_MODEL"`, qwen2.5-coder:32b — non-Claude, satisfies ADR-011);
+  escalate to Codex `$RR_ESC_MODEL` on any low-confidence or non-trivial finding.
+- Scope to the DIFF (`$RR_SCOPE`=diff), not a whole-repo sweep.
+- **Pass 2 (Opus second pass) is UNCHANGED** — it still runs on novel
+  crypto/auth/payment regardless of tier. Tiering only changes Pass 1's engine.
+- After auditing, log the route: `rr_log_route security-auditor "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" "$RR_SCOPE" "<yes|no>"`.
+
 ## Your job
 
 For any code touching auth, data access, secrets, or external inputs:
 
-### Pass 1 — Codex (cross-family)
+### Pass 1 — cross-family (routed engine from Step 0.5, scoped to the diff)
 
-```bash
-codex exec "Security-audit the current changes. Sweep for: OWASP Top 10 (injection, broken auth, sensitive data exposure, etc.); hardcoded secrets (must be in env/Keychain, never in code); input validation on every external input; output sanitization; Supabase RLS coverage and policy correctness; crypto using current best-practice libraries; logging hygiene (no PII/secrets); error messages that don't leak internal state; auth flows with no bypass paths. Output findings as CRITICAL / HIGH / MEDIUM / LOW with file:line."
-```
+Run the audit prompt on the routed engine/model:
+- **high or escalation / Codex:** `codex exec -m "$RR_MODEL" -c model_reasoning_effort="$RR_EFFORT" "<audit prompt>"`
+- **routine / local:** `ollama run "$RR_MODEL"` with the same prompt, diff piped in.
 
-Capture Codex's output.
+Audit prompt (both engines): `"Security-audit the current changes (diff <base>..<head>). Sweep for: OWASP Top 10 (injection, broken auth, sensitive data exposure, etc.); hardcoded secrets (must be in env/Keychain, never in code); input validation on every external input; output sanitization; Supabase RLS coverage and policy correctness; crypto using current best-practice libraries; logging hygiene (no PII/secrets); error messages that don't leak internal state; auth flows with no bypass paths. Output findings as CRITICAL / HIGH / MEDIUM / LOW with file:line."`
+
+Capture the output.
 
 ### Pass 2 — belt-and-suspenders (Claude Opus)
 

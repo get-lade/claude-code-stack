@@ -34,17 +34,41 @@ Read the `VERDICT`:
 - **`BLOCKED_NETWORK` / `BLOCKED_NOCREDS` / `PROBE_SKIPPED`** → the cross-family
   pass is unavailable. Do **NOT** dead-stop. Go to "Graceful degradation" below.
 
+## Step 0.5 — route by stakes (ADR-025, run after preflight)
+
+Pick the review tier by the diff's stakes so routine diffs don't pay
+frontier-tier-high-effort. Source the router and obey it:
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/review-router.sh"
+# or, from the stack repo: source scripts/lib/review-router.sh
+rr_run reviewer    # prints the tier block; sets RR_STAKES/RR_ENGINE/RR_MODEL/RR_EFFORT/RR_SCOPE/RR_ESC_*
+```
+
+- **`RR_STAKES=high`** (auth/crypto/payment/migration/RLS paths, or domain-mode
+  security|schema-migration, or sensitivity=high) → run Codex on `$RR_MODEL` @
+  effort `$RR_EFFORT` (gpt-5.5@high). Requires Step-0 preflight `READY`.
+- **`RR_STAKES=routine`** → run the LOCAL cross-family model FIRST (`$RR_ENGINE`
+  = `local`, `$RR_MODEL` = qwen2.5-coder:32b via `ollama run`). Qwen (Alibaba) is
+  non-Claude, so it satisfies the ADR-011 cross-family rule. **Escalate** to
+  Codex `$RR_ESC_MODEL` @ `$RR_ESC_EFFORT` ONLY if Qwen returns low-confidence /
+  self-contradictory findings or the diff is non-trivial. A routine review may
+  proceed on local Qwen even if Step-0 preflight is BLOCKED (OpenAI gates only
+  the Codex tiers — high and routine-escalation).
+- **Always scope to the DIFF** (`$RR_SCOPE`=diff, `<base>..<head>`), never a
+  whole-repo cold read — this is the biggest token lever.
+- After the review completes, log the route once:
+  ```bash
+  rr_log_route reviewer "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" "$RR_SCOPE" "<yes|no escalated>"
+  ```
+
 ## Your job
 
 1. Identify the diff: `git diff <base>..<head>` (base = merge target, head = current branch).
-2. Run the adversarial review through Codex non-interactively:
-   ```bash
-   codex exec review
-   ```
-   `codex exec review` runs a code review against the current repository. For a scoped review with explicit criteria, instead use:
-   ```bash
-   codex exec "Adversarially review the diff <base>..<head>. Read the code cold — you do NOT have the architect's plan or implementer's commentary. Check: correctness, edge cases (empty/null/boundary/malformed), security (injection, auth bypass, secret leakage, RLS holes), error handling, performance (N+1, unbounded loops, missing indexes), style, dependencies. Output findings as BLOCKING / NON-BLOCKING / NIT with file:line."
-   ```
+2. Run the adversarial review on the **routed** engine/model from Step 0.5, scoped to the diff:
+   - **routine / local:** `ollama run "$RR_MODEL"` with the review prompt below (diff piped in).
+   - **high or escalation / Codex:** `codex exec -m "$RR_MODEL" -c model_reasoning_effort="$RR_EFFORT" "<review prompt>"`. (`codex exec review` is the whole-repo shortcut — prefer the scoped prompt form so the review stays diff-bounded.)
+   - Review prompt (both engines): `"Adversarially review the diff <base>..<head>. Read the code cold — you do NOT have the architect's plan or implementer's commentary. Check: correctness, edge cases (empty/null/boundary/malformed), security (injection, auth bypass, secret leakage, RLS holes), error handling, performance (N+1, unbounded loops, missing indexes), style, dependencies. Output findings as BLOCKING / NON-BLOCKING / NIT with file:line."`
 3. Capture Codex's output verbatim.
 4. Structure it into the handoff format below. Do not soften, drop, or override Codex's findings.
 5. **If Step 0 returned `READY` but `codex` isn't on PATH — walk this ladder.** The requirement (ADR-011, ADR-015) is review by a **non-Claude model family** — the *model*, not the *binary*:
@@ -104,10 +128,10 @@ The code is read cold. If the code can't be understood from itself, that's a fin
 Write `.claude/sessions/<session-id>/reviewer-report.md`:
 
 ```markdown
-# Reviewer report (Codex)
+# Reviewer report (<engine>)
 Date: <iso>
 Diff: <base>..<head>
-Review engine: Codex CLI
+Review tier (ADR-025): <high | routine> — engine <local|codex>, model <RR_MODEL>, escalated <yes|no>
 Preflight (ADR-022): <READY | BLOCKED_NETWORK | BLOCKED_NOCREDS | PROBE_SKIPPED>
 Cross-family deviation: <no | YES — Claude-only pass, see Decision>
 
