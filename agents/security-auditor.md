@@ -33,7 +33,11 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh
 
 - **`READY`** → proceed.
 - **`BLOCKED_NETWORK` / `BLOCKED_NOCREDS` / `PROBE_SKIPPED`** → the Codex pass is
-  unavailable. Do **NOT** dead-stop. Go to "Graceful degradation" below.
+  unavailable. Do **NOT** dead-stop, and do **NOT** degrade yet — run Step 0.5
+  first: a `routine` audit runs on **local Qwen** and proceeds regardless of this
+  verdict. Go to "Graceful degradation" only when the routed tier is **Codex**
+  (high, or a routine escalation) AND the preflight is not `READY`. (The Opus
+  second pass on novel crypto/auth is independent of this verdict.)
 
 ## Step 0.5 — route by stakes (ADR-025, run after preflight)
 
@@ -125,7 +129,8 @@ Write `.claude/sessions/<session-id>/security-report.md`:
 # Security audit
 Date: <iso>
 Scope: <files / endpoints / DB objects>
-Passes: Codex (cross-family) + <Opus second pass: yes/no>
+Review tier (ADR-025): <high | routine> — Pass 1 engine <local/Qwen | codex>, model <RR_MODEL>, escalated <yes/no>
+Passes: Pass 1 cross-family (<engine>) + <Opus second pass: yes/no>
 Preflight (ADR-022): <READY | BLOCKED_NETWORK | BLOCKED_NOCREDS | PROBE_SKIPPED>
 Cross-family deviation: <no | YES — Claude-only pass, see Decision>
 

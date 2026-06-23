@@ -31,8 +31,12 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh
 Read the `VERDICT`:
 
 - **`READY`** → proceed to "Your job" below.
-- **`BLOCKED_NETWORK` / `BLOCKED_NOCREDS` / `PROBE_SKIPPED`** → the cross-family
-  pass is unavailable. Do **NOT** dead-stop. Go to "Graceful degradation" below.
+- **`BLOCKED_NETWORK` / `BLOCKED_NOCREDS` / `PROBE_SKIPPED`** → the **Codex**
+  path is unavailable. Do **NOT** dead-stop, and do **NOT** degrade yet —
+  this verdict gates only the Codex tiers. Run Step 0.5 first: a `routine`
+  review runs on **local Qwen** and proceeds normally regardless of this verdict.
+  Go to "Graceful degradation" only when the routed tier is a **Codex** one
+  (high, or a routine escalation) AND the preflight is not `READY`.
 
 ## Step 0.5 — route by stakes (ADR-025, run after preflight)
 
@@ -69,7 +73,7 @@ rr_run reviewer    # prints the tier block; sets RR_STAKES/RR_ENGINE/RR_MODEL/RR
    - **routine / local:** `ollama run "$RR_MODEL"` with the review prompt below (diff piped in).
    - **high or escalation / Codex:** `codex exec -m "$RR_MODEL" -c model_reasoning_effort="$RR_EFFORT" "<review prompt>"`. (`codex exec review` is the whole-repo shortcut — prefer the scoped prompt form so the review stays diff-bounded.)
    - Review prompt (both engines): `"Adversarially review the diff <base>..<head>. Read the code cold — you do NOT have the architect's plan or implementer's commentary. Check: correctness, edge cases (empty/null/boundary/malformed), security (injection, auth bypass, secret leakage, RLS holes), error handling, performance (N+1, unbounded loops, missing indexes), style, dependencies. Output findings as BLOCKING / NON-BLOCKING / NIT with file:line."`
-3. Capture Codex's output verbatim.
+3. Capture the routed engine's output verbatim (Qwen for routine, Codex for high/escalation).
 4. Structure it into the handoff format below. Do not soften, drop, or override Codex's findings.
 5. **If Step 0 returned `READY` but `codex` isn't on PATH — walk this ladder.** The requirement (ADR-011, ADR-015) is review by a **non-Claude model family** — the *model*, not the *binary*:
    - **CLI on PATH** (`command -v codex`) → use it as in step 2.

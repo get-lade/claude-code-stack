@@ -20,21 +20,22 @@ The stack's design calls for product critique from a non-Claude model family. Cl
 
 ## Step 0.5 — route by stakes (ADR-025)
 
-Product critique runs BEFORE code exists, so there's no diff to classify — it
-defaults to the **routine** tier (local cross-family model). That's the right
-call: a "should we build this?" critique rarely needs frontier-tier-high-effort.
+Product critique runs BEFORE code exists. There's no diff that represents the
+proposed feature, so the router is **explicitly forced to routine** — do NOT let
+it classify off whatever unrelated changes happen to be on the current branch
+(that would spuriously route `high`). A "should we build this?" critique rarely
+needs frontier-tier-high-effort.
 
 ```bash
 source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/review-router.sh"
-rr_run product-critic   # no diff → routine; sets RR_ENGINE/RR_MODEL/RR_ESC_*
+REVIEW_TIER_FORCE=routine rr_run product-critic   # deterministic routine; sets RR_ENGINE/RR_MODEL/RR_ESC_*
 ```
 
 - **Default (routine)** → run on the LOCAL cross-family model (`ollama run
-  "$RR_MODEL"`, qwen2.5-coder:32b — non-Claude, satisfies ADR-011). Escalate to
-  Codex `$RR_ESC_MODEL` if the feature is high-stakes (auth/payments/financial/
-  regulated) or the critique comes back shallow.
-- Force the high tier for a high-stakes feature with
-  `STACK_DOMAIN_MODE=security rr_run product-critic` (→ Codex gpt-5.5).
+  "$RR_MODEL"`, qwen2.5-coder:32b — non-Claude, satisfies ADR-011).
+- **Escalate by judgment** to Codex `$RR_ESC_MODEL` when the feature is genuinely
+  high-stakes (auth/payments/financial/regulated) or Qwen's critique comes back
+  shallow — run the same prompt via `codex exec -m "$RR_ESC_MODEL"`.
 - After critiquing, log the route: `rr_log_route product-critic "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" n/a "<yes|no>"`.
 
 ## Your job
@@ -78,7 +79,7 @@ In cloud sessions the key is normally an **environment variable** (the intended 
 Write `.claude/sessions/<session-id>/product-critique.md`:
 
 ```markdown
-# Product critique (Codex) — <feature name>
+# Product critique (<engine: Qwen | Codex>) — <feature name>
 Date: <iso>
 
 ## Restated problem

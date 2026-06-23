@@ -127,6 +127,32 @@ else
   pass "cross-family invariant (no tier routes to a Claude model)"
 fi
 
+# --- 9. ADR-025 review hardening: fail-safe + cross-family enforcement -------
+
+# 9a. expanded regex covers crypto/auth paths the original list missed
+for p in src/lib/jwt.ts infra/kms/keyring.tf wallet/seed_phrase.ts auth/private_key.pem config/tls/cert.pem services/hmac/verify.ts; do
+  R="$(build_repo "$p")"
+  assert_eq "expanded regex: $p -> high" "high" "$(classify "$R")"
+done
+
+# 9b. invalid REVIEW_TIER_FORCE is IGNORED — must NOT downgrade a high-stakes diff
+R="$(build_repo src/auth/login.ts)"
+assert_eq "REVIEW_TIER_FORCE typo ignored -> still high" "high" "$(classify "$R" REVIEW_TIER_FORCE=hgih)"
+assert_eq "REVIEW_TIER_FORCE=routine honored (by design)" "routine" "$(classify "$R" REVIEW_TIER_FORCE=routine)"
+
+# 9c. git fail-safe: an unresolvable ref defaults HIGH, never silent routine
+R="$(build_repo docs/notes.md)"
+gb="$( cd "$R"; bash -c "source '$LIB'; rr_classify_stakes nonexistent-ref HEAD" | awk '{print $1}' )"
+assert_eq "bad base ref -> high (fail-safe)" "high" "$gb"
+
+# 9d. ADR-011 enforced at resolution: a Claude model via env OR config is refused
+resolve() { ( cd "$R"; env "$@" bash -c "source '$LIB'; rr_resolve REVIEW_HIGH_MODEL '.review_tiers.high.model' gpt-5.5 2>/dev/null" ); }
+assert_eq "env Claude model refused -> default" "gpt-5.5" "$(resolve REVIEW_HIGH_MODEL=claude-opus-4-8)"
+CFGC="$TMP/claude-routing.json"
+echo '{ "review_tiers": { "high": { "model": "claude-sonnet-4-6" } } }' > "$CFGC"
+assert_eq "config Claude model refused -> default" "gpt-5.5" "$(resolve RR_CONFIG="$CFGC")"
+assert_eq "non-Claude override still passes through" "gpt-5.4" "$(resolve REVIEW_HIGH_MODEL=gpt-5.4)"
+
 echo "----------------------------------------"
 echo "review-router: PASS=$PASS FAIL=$FAIL"
 [[ "$FAIL" -eq 0 ]]

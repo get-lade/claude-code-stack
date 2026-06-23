@@ -47,9 +47,12 @@
 set -uo pipefail
 
 # Paths whose presence in a diff marks it high-stakes. Matched case-insensitively
-# against changed file paths. Keep this list conservative — a false "high" only
-# costs money; a false "routine" sends risky code to the cheap tier.
-RR_HIGH_STAKES_RE='(auth|login|oauth|session|token|passwd|password|secret|credential|crypto|encrypt|decrypt|signing|payment|billing|invoice|charge|stripe|financ|ledger|payroll|migration|/migrations/|schema|\.sql$|rls|policy|\.env|security|webhook)'
+# against changed file paths. The list is deliberately BROAD and biased toward
+# false-high: a false "high" only costs money, but a false "routine" sends risky
+# code to the cheap tier — the failure mode that matters for a security engine.
+# (ADR-025 review: expanded to cover jwt/hmac/kms/cert/tls/ssh/vault/seed/
+# private-key/key+cert file extensions, which the original list missed.)
+RR_HIGH_STAKES_RE='(auth|login|oauth|sso|saml|session|token|jwt|jwk|passwd|password|passphrase|secret|credential|crypto|encrypt|decrypt|cipher|hmac|sign|keyring|keystore|keypair|private|mnemonic|seed|vault|kms|totp|mfa|2fa|tls|ssl|ssh|cert|payment|billing|invoice|charge|stripe|financ|ledger|payroll|migration|/migrations/|schema|\.sql$|rls|policy|\.env|security|webhook|\.(pem|key|crt|cer|p12|pfx|jks|keystore)$)'
 
 # --- config resolution --------------------------------------------------------
 
@@ -61,18 +64,34 @@ rr_config_file() {
   echo ""
 }
 
+# Model-family names that MUST NOT be used for adversarial review (ADR-011: the
+# reviewer must be a DIFFERENT family than the Claude implementer). Enforced at
+# resolution time so a stray env/config override can't quietly defeat the rule.
+RR_CLAUDE_RE='claude|anthropic|opus|sonnet|haiku|fable'
+
 # rr_resolve <env_var_name> <jq_path> <default>
-# env override > config value > default. Empty/null config values fall through.
+# Resolution order: env override > config value > default. Empty/null config
+# values fall through. A resolved value that names a Claude family is REFUSED
+# (ADR-011) and the built-in non-Claude default is used instead — never silently
+# honored.
 rr_resolve() {
-  local env_name="$1" jq_path="$2" def="$3"
+  local env_name="$1" jq_path="$2" def="$3" out=""
   local env_val="${!env_name:-}"
-  [[ -n "$env_val" ]] && { echo "$env_val"; return; }
-  local cfg; cfg="$(rr_config_file)"
-  if [[ -n "$cfg" ]] && command -v jq >/dev/null 2>&1; then
-    local v; v="$(jq -r "${jq_path} // empty" "$cfg" 2>/dev/null)"
-    [[ -n "$v" && "$v" != "null" ]] && { echo "$v"; return; }
+  if [[ -n "$env_val" ]]; then
+    out="$env_val"
+  else
+    local cfg; cfg="$(rr_config_file)"
+    if [[ -n "$cfg" ]] && command -v jq >/dev/null 2>&1; then
+      local v; v="$(jq -r "${jq_path} // empty" "$cfg" 2>/dev/null)"
+      [[ -n "$v" && "$v" != "null" ]] && out="$v"
+    fi
   fi
-  echo "$def"
+  [[ -z "$out" ]] && out="$def"
+  if echo "$out" | grep -qiE "$RR_CLAUDE_RE"; then
+    echo "[review-router] REFUSED Claude-family model '$out' for $env_name — ADR-011 requires a non-Claude reviewer; using default '$def'." >&2
+    out="$def"
+  fi
+  echo "$out"
 }
 
 # --- diff resolution ----------------------------------------------------------
@@ -87,22 +106,26 @@ rr_default_base() {
   echo "HEAD~1"
 }
 
-rr_changed_files() {
-  local base="$1" head="$2"
-  local mb; mb="$(git merge-base "$base" "$head" 2>/dev/null || echo "$base")"
-  git diff --name-only "$mb..$head" 2>/dev/null
-}
-
 # --- classification -----------------------------------------------------------
 
 rr_classify_stakes() {
-  # Echoes "high <reason>" or "routine <reason>". Env overrides win first so
-  # tests and operators can force a tier.
+  # Echoes "high <reason>" or "routine <reason>".
+  #
+  # FAIL-SAFE PRINCIPLE (ADR-025 review): on ANY ambiguity or error — an invalid
+  # override, an unresolvable ref, a failed git command — default to HIGH, never
+  # routine. Downgrading is only ever done on a POSITIVE "this diff is routine"
+  # signal (clean diff, no high-stakes paths). Silence is never routine.
   local base="$1" head="$2"
 
-  if [[ -n "${REVIEW_TIER_FORCE:-}" ]]; then
-    echo "${REVIEW_TIER_FORCE} forced via REVIEW_TIER_FORCE"; return
-  fi
+  # Forced tier: honor ONLY the two valid values. An invalid/typo value is
+  # ignored (NOT treated as routine) and classification continues.
+  case "${REVIEW_TIER_FORCE:-}" in
+    high)    echo "high forced via REVIEW_TIER_FORCE"; return ;;
+    routine) echo "routine forced via REVIEW_TIER_FORCE"; return ;;
+    "")      : ;;
+    *)       : ;;  # invalid → ignore, fall through to detection
+  esac
+
   case "${STACK_DOMAIN_MODE:-}" in
     security|schema-migration)
       echo "high domain-mode=${STACK_DOMAIN_MODE}"; return ;;
@@ -111,8 +134,16 @@ rr_classify_stakes() {
     echo "high sensitivity=high"; return
   fi
 
-  local files hit
-  files="$(rr_changed_files "$base" "$head")"
+  # Resolve the diff. ANY git failure → HIGH (fail-safe): a broken git state must
+  # not silently downgrade. Only a clean, empty diff is a legitimate routine.
+  if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1 \
+     || ! git rev-parse --verify --quiet "${head}^{commit}" >/dev/null 2>&1; then
+    echo "high unresolved diff refs (fail-safe: ${base}..${head})"; return
+  fi
+  local mb files hit
+  mb="$(git merge-base "$base" "$head" 2>/dev/null)" || { echo "high merge-base failed (fail-safe)"; return; }
+  files="$(git diff --name-only "$mb..$head" 2>/dev/null)" || { echo "high git diff failed (fail-safe)"; return; }
+
   if [[ -n "$files" ]]; then
     hit="$(printf '%s\n' "$files" | grep -iE "$RR_HIGH_STAKES_RE" | head -1)"
     if [[ -n "$hit" ]]; then
@@ -175,7 +206,9 @@ rr_log_route() {
   local agent="${1:-unknown}" stakes="${2:-unknown}" engine="${3:-unknown}" \
         model="${4:-unknown}" scope="${5:-diff}" escalated="${6:-no}"
   command -v jq >/dev/null 2>&1 || return 0
-  local log_dir="$HOME/.claude/logs"; mkdir -p "$log_dir" 2>/dev/null || return 0
+  # ${HOME:-/tmp}: under `set -u` a bare $HOME would abort the caller before the
+  # mkdir guard could fire — defeating "best-effort, never fails the caller".
+  local log_dir="${HOME:-/tmp}/.claude/logs"; mkdir -p "$log_dir" 2>/dev/null || return 0
   local project; project="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
   jq -nc \
     --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -191,7 +224,8 @@ rr_log_route() {
     >> "$log_dir/subagent-runs.jsonl" 2>/dev/null || true
 }
 
-# Allow direct execution for manual / CI inspection.
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# Allow direct execution for manual / CI inspection. The `:-` guards keep
+# sourcing safe under `set -u` even where BASH_SOURCE/$0 are unset.
+if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then
   rr_run "${1:-cli}" "${2:-}" "${3:-}"
 fi

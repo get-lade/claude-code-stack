@@ -44,13 +44,23 @@ Plus three invariants:
 
 - **Scope fix:** every tier reviews the **diff** (`base..head`), never the whole
   repo. Applies even to high-stakes reviews.
-- **Cross-family (ADR-011) holds on both tiers.** Local Qwen (Alibaba) and
-  gpt-5.x (OpenAI) are each a different model family than the Claude
-  implementer. The router MUST NOT route review to a Claude model — enforced by
-  a test.
-- **Route logging.** Every routed review appends an `event:"review_route"` row
-  to `subagent-runs.jsonl`, so the high/routine split is verifiable against the
-  ~27% high / ~73% routine estimate before any further tuning.
+- **Fail-safe toward `high`.** On ANY ambiguity or error — an invalid
+  `REVIEW_TIER_FORCE`, an unresolvable git ref, a failed `git diff` — the router
+  defaults to **high**, never routine. Downgrading happens only on a positive
+  "this diff is routine" signal (clean diff, no high-stakes paths). For the
+  engine that gates everything, silence is never routine. (Added after the
+  ADR-025 cross-family review found the original logic failed *open* toward
+  routine on every error/override path.)
+- **Cross-family (ADR-011) enforced at resolution, not just documented.**
+  `rr_resolve` REFUSES any model id naming a Claude family
+  (`claude|anthropic|opus|sonnet|haiku|fable`) from env or config and falls back
+  to the built-in non-Claude default — so a stray override cannot quietly defeat
+  the rule. Covered by tests for env- and config-supplied Claude ids.
+- **Route logging is observability-only.** Every routed review appends an
+  `event:"review_route"` row to `subagent-runs.jsonl`. This lets us confirm the
+  high/routine *split* fired as estimated (~27/73); it does NOT certify each
+  decision was correct (a mis-classified routine logs as a normal routine). It
+  is telemetry to read, not a control loop.
 
 **Config-driven models (Tier-5 forward-compat).** Tier model IDs are resolved
 `env var > config/model-routing.json .review_tiers > built-in default` — never
@@ -59,11 +69,18 @@ routine/escalation (and possibly high) models to a larger local model by editing
 the `review_tiers` block — no script change. A strong enough local model can
 absorb the high tier too, driving OpenAI review spend toward $0.
 
-**Escalation is prose-judgment, not a second classifier (for now).** A routine
-review runs local Qwen first; the orchestrating Claude escalates to gpt-5.4 only
-on low-confidence / non-trivial output. A dynamic LLM triage layer (the "hybrid
-escalator") is deferred until the route log shows whether the cheap tier
-actually misses findings.
+**Escalation is best-effort, NOT a guarantee — the real backstop is the Opus
+second pass.** A routine review runs local Qwen first; the orchestrating Claude
+*may* escalate to gpt-5.4 on shallow / low-confidence output. This is a
+convenience, not a safety mechanism: it is subjective and unaudited, so we do not
+rely on it to catch what Qwen misses. For security-relevant code the genuine
+safety net is the **unchanged security-auditor Opus second pass on novel
+crypto/auth/payment**, which runs regardless of tier. A deterministic triage
+layer (the "hybrid escalator") is deferred until the route log shows whether the
+cheap tier actually misses findings; the fail-safe `high` default + the Opus
+second pass cover the interim. (Reframed after the ADR-025 review flagged that
+the original "escalate on judgment" framing over-claimed a safety property the
+mechanism does not provide.)
 
 ## Consequences
 
@@ -82,7 +99,16 @@ a separate CLI account; their cost is pending the console number and the scope
 fix barely applies (they intentionally want whole-repo context). Tracked
 separately.
 
-**Risk:** a mis-tuned high-stakes regex could send risky code to the cheap tier.
-Mitigated by a conservative regex (false-high only costs money), the unchanged
-Opus second pass on novel crypto/auth, and the explicit override knobs
-(`REVIEW_TIER_FORCE`, `STACK_DOMAIN_MODE`, `STACK_SENSITIVITY`).
+**Risk:** the high-stakes classifier is path-regex-based, so it can be defeated
+two ways. (1) *Missing terms* — addressed in review by broadening the regex
+(jwt/hmac/kms/cert/tls/ssh/vault/seed/private-key + key/cert file extensions) and
+biasing it toward false-high; a canary test asserts representative crypto/auth
+paths classify `high`. (2) *Refactor drift* — renaming a high-stakes directory to
+a name the regex no longer matches silently demotes it (Gemini's point; the false
+case the "false-high only costs money" framing does NOT cover). Residual
+mitigation: the fail-safe `high` default on any error, the unchanged Opus second
+pass on novel crypto/auth, the override knobs (`REVIEW_TIER_FORCE`,
+`STACK_DOMAIN_MODE`, `STACK_SENSITIVITY`), and a documented expectation to review
+`RR_HIGH_STAKES_RE` during any repo-wide path refactor. A semantic classifier
+(structured-signal tool or forced-function-call LLM triage) is the longer-term
+fix if drift bites — deferred per "escalation" above.
