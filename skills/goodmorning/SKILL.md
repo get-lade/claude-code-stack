@@ -113,6 +113,22 @@ offered, and only when it looks like a real project.
 - Either way, `mkdir -p .claude && touch .claude/.automation-offered` so it
   never re-prompts here. Skip the touch silently if `.claude/` can't be written.
 
+### 6f. Model-audit freshness check (skip silently if config missing)
+
+Is the model lineup stale? Models and pricing shift; a monthly audit catches drift.
+
+- Read `~/.claude/config/model-routing.json`. If absent, skip silently.
+- Extract `.last_audited` (ISO date string, e.g. `"2026-05-16"`).
+- Compute days since that date.
+  ```
+  LAST=$(jq -r '.last_audited // empty' ~/.claude/config/model-routing.json 2>/dev/null)
+  if [ -n "$LAST" ]; then
+    DAYS=$(( ( $(date -u +%s) - $(date -u -d "$LAST" +%s 2>/dev/null || date -u -j -f "%Y-%m-%d" "$LAST" +%s 2>/dev/null) ) / 86400 ))
+  fi
+  ```
+- If `last_audited` is absent OR `$DAYS >= 30`: set `Models:` line to `audit due (last: <date or never>) — run /model-audit`.
+- If `$DAYS < 30`: omit the line (don't clutter the summary).
+
 ### 7. Print summary
 
 Emit summary **inside a single ``` fenced code block** (no language tag). Caveman tone — drop articles, fragments OK, short. ≤7 lines. Use these exact labels:
@@ -124,6 +140,7 @@ Tier: <n + mode, or "uninit — run /project-init">
 Watch: <flags / pending SQL / stale TODOs>
 Team: <benched roles last 14d, comma list — or "all in play", or "no log yet">
 Stack: <N behind — run update.sh — omit line entirely if current/unknown>
+Models: <audit due (last: YYYY-MM-DD) — run /model-audit — omit if audited within 30 days>
 Style: <communication_style·model_effort from current-prefs.json — "/session to change"; omit if no state file>
 Next: <one concrete action>
 ```
