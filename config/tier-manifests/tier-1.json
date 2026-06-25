@@ -26,7 +26,9 @@
       { "from": "skills/auto-merge/templates/auto-merge.yml", "to": "~/.claude/skills/auto-merge/templates/auto-merge.yml" },
       { "from": "skills/auto-merge/templates/run-tests.node.yml", "to": "~/.claude/skills/auto-merge/templates/run-tests.node.yml" },
       { "from": "skills/auto-merge/templates/run-tests.python.yml", "to": "~/.claude/skills/auto-merge/templates/run-tests.python.yml" },
-      { "from": "templates/stack-defaults.template.json", "to": "~/.claude/stack-defaults.json", "prompt_for_values": true }
+      { "from": "templates/stack-defaults.template.json", "to": "~/.claude/stack-defaults.json", "prompt_for_values": true },
+      { "from": "hooks/rtk-rewrite.sh", "to": "~/.claude/hooks/rtk-rewrite.sh", "executable": true },
+      { "from": "config/settings.tier-1.template.json", "to": "~/.claude/settings.json", "merge": true }
     ]
   },
   "requirements": [],
@@ -49,6 +51,7 @@
     "test -f ~/.claude/skills/tier/SKILL.md",
     "test -f ~/.claude/skills/session/SKILL.md",
     "test -f ~/.claude/skills/auto-merge/SKILL.md",
-    "test -f ~/.claude/stack-defaults.json"
+    "test -f ~/.claude/stack-defaults.json",
+    "test -x ~/.claude/hooks/rtk-rewrite.sh"
   ]
 }

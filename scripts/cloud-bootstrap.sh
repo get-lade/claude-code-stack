@@ -137,3 +137,23 @@ install_critic_cli() {
 
 install_critic_cli OPENAI_API_KEY @openai/codex codex
 install_critic_cli GEMINI_API_KEY @google/gemini-cli gemini
+
+# --- RTK (token-reduction proxy) -------------------------------------------
+# Rewrites shell commands (git, docker, npm, etc.) to pipe through RTK for
+# compressed output before it hits Claude's context. Tier 1+ installs the
+# PreToolUse hook; this ensures the binary is present in cloud containers.
+# Best-effort: failure here never blocks the session.
+if [ "${RTK_DISABLED:-}" != "1" ]; then
+  if command -v rtk >/dev/null 2>&1; then
+    log "rtk already on PATH; skipping install."
+  else
+    log "Installing rtk (token-reduction proxy)..."
+    if curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh >/dev/null 2>&1; then
+      # install.sh puts the binary in ~/.local/bin — ensure it's on PATH this session.
+      export PATH="$HOME/.local/bin:$PATH"
+      log "rtk installed ($(rtk --version 2>/dev/null || echo 'version unknown'))."
+    else
+      log "WARNING: rtk install failed. Sessions will run without token compression."
+    fi
+  fi
+fi
