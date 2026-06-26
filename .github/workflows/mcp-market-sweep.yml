@@ -1,0 +1,72 @@
+name: MCP Market daily sweep
+
+# Durable daily reminder to review MCP Market for new servers/skills.
+# Runs in CI (survives ephemeral cloud containers, unlike an in-session cron).
+# Deterministic only — no LLM call, no secrets beyond GITHUB_TOKEN. It links
+# the day's MCP Market top-list and the currently-wired servers, then opens or
+# refreshes a single rolling issue for a Claude Code session to action.
+
+on:
+  schedule:
+    - cron: "13 9 * * *" # 09:13 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Build sweep reminder
+        id: build
+        run: |
+          set -euo pipefail
+          template="config/settings.tier-1.template.json"
+          wired=$(jq -r '.mcpServers | keys | join(", ")' "$template")
+
+          # MCP Market publishes lists at /daily/top-mcp-server-list-<month>-<d>-<year>
+          months=(january february march april may june july august september october november december)
+          m=${months[$(( $(date -u +%-m) - 1 ))]}
+          d=$(date -u +%-d)
+          y=$(date -u +%Y)
+          list_url="https://mcpmarket.com/daily/top-mcp-server-list-${m}-${d}-${y}"
+          today=$(date -u +%Y-%m-%d)
+
+          {
+            echo "body<<EOF"
+            echo "## MCP Market sweep — ${today}"
+            echo ""
+            echo "Today's top list: ${list_url}"
+            echo "Browse all: https://mcpmarket.com/server"
+            echo ""
+            echo "**Currently wired** (\`${template}\`): ${wired}"
+            echo ""
+            echo "Run a Claude Code session to diff the list against the wired set,"
+            echo "shortlist genuinely new servers/skills relevant to the stack tiers,"
+            echo "and draft a PR wiring approved candidates. Close this issue when done."
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open or refresh rolling issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BODY: ${{ steps.build.outputs.body }}
+        run: |
+          set -euo pipefail
+          title="MCP Market daily sweep"
+          num=$(gh issue list --state open --search "$title in:title" \
+            --json number,title \
+            --jq ".[] | select(.title==\"$title\") | .number" | head -1)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$BODY"
+          else
+            gh issue create --title "$title" --body "$BODY" --label "mcp-sweep" 2>/dev/null \
+              || gh issue create --title "$title" --body "$BODY"
+          fi

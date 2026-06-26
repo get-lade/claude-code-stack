@@ -9,6 +9,10 @@
 | **KISS** | Keep It Simple — simplest solution that works |
 | **YAGNI** | You Aren't Gonna Need It — don't build unused features |
 
+> These principles converge with Andrej Karpathy's widely-shared LLM-coding
+> rules (think-before-coding, simplicity-first, surgical-changes, goal-driven).
+> The stack encodes them directly here rather than vendoring a separate skill.
+
 ## Working Principles (Always Active)
 
 1. **Don't assume. Don't hide confusion. Surface tradeoffs.** If you're unsure what I want, ask. If two reasonable approaches exist, name both with their tradeoffs before picking one. Silent guesses are the source of most wrong-direction work.
