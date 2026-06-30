@@ -75,6 +75,14 @@ cfp_api_reachable() {
 
 cfp_run() {
   local cli key reach verdict fix
+  # ADR-028: fill OPENAI_API_KEY from the Keychain backup (openai-api-key) IFF it
+  # is not already set, BEFORE the env-based key check — so a local box with the
+  # Keychain item passes preflight even when the Codex CLI auth is gone. Cloud env
+  # always wins (oai_export is a no-op when OPENAI_API_KEY is already set).
+  local _oai_lib="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-key.sh"
+  [[ -f "$_oai_lib" ]] || _oai_lib="$(dirname "${BASH_SOURCE[0]}")/openai-key.sh"
+  # shellcheck source=/dev/null
+  [[ -f "$_oai_lib" ]] && { source "$_oai_lib"; oai_export 2>/dev/null || true; }
   cli="$(cfp_have_cli)"
   key="$(cfp_have_key)"
 
