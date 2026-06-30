@@ -1,5 +1,5 @@
 {
-  "version": "1.1.1",
+  "version": "1.2.0",
   "last_audited": "2026-05-16",
   "next_audit_due": "2026-06-16",
   "verification_note": "Model IDs and pricing verified 2026-05-15. /model-audit re-verifies monthly. Verify live before any cost-sensitive operation.",
@@ -60,6 +60,32 @@
         "qwen-2.5-coder-7b": { "context_window": 32768 },
         "llama-3.3-70b": { "context_window": 128000 }
       }
+    },
+    "deepseek": {
+      "api_base": "https://api.deepseek.com",
+      "endpoint": "/chat/completions",
+      "openai_compatible": true,
+      "api_key_keychain": "deepseek-api-key",
+      "api_key_env_fallback": "DEEPSEEK_API_KEY",
+      "supports_caching": true,
+      "pricing_note": "billed via the DeepSeek API key; like codex/gemini it is NOT metered into cost_log.",
+      "models": {
+        "deepseek-v4-pro": {
+          "api_model_id": "deepseek-v4-pro",
+          "pricing_per_million_input": 0.435,
+          "pricing_per_million_input_cache_hit": 0.003625,
+          "pricing_per_million_output": 0.87,
+          "pricing_verified_date": "2026-06-30"
+        },
+        "deepseek-v4-flash": {
+          "api_model_id": "deepseek-v4-flash",
+          "pricing_per_million_input": 0.14,
+          "pricing_per_million_input_cache_hit": 0.0028,
+          "pricing_per_million_output": 0.28,
+          "pricing_verified_date": "2026-06-30"
+        }
+      },
+      "notes": "ADR-026: DeepSeek-v4 added as a THIRD, INDEPENDENT adversarial voice (advisory, HIGH-stakes only), orchestrated via scripts/lib/deepseek-review.sh. OpenAI-compatible API. Cross-family (ADR-011): DeepSeek is non-Claude — never point it at a Claude model. The deepseek-chat/deepseek-reasoner ids retire 2026-07-24; use the v4 ids. Key in macOS Keychain item 'deepseek-api-key' (env DEEPSEEK_API_KEY in cloud/CI)."
     }
   },
   "subagent_assignments": {
@@ -93,7 +119,15 @@
       "engine": "codex",
       "model": "gpt-5.5",
       "effort": "high",
-      "when": "diff touches auth/crypto/payment/migration/RLS/secret paths, or domain-mode security|schema-migration, or sensitivity=high"
+      "when": "diff touches auth/crypto/payment/migration/RLS/secret paths, or domain-mode security|schema-migration, or sensitivity=high",
+      "third_voice": {
+        "engine": "deepseek",
+        "model": "deepseek-v4-pro",
+        "advisory": true,
+        "blocks": false,
+        "helper": "scripts/lib/deepseek-review.sh",
+        "when": "HIGH stakes only — additive to the codex pass, never replaces it, never auto-blocks (ADR-026). A missing key / unreachable API degrades to 'voice unavailable', leaving codex as the gate."
+      }
     },
     "routine": {
       "engine": "local",

@@ -70,6 +70,24 @@ rr_run reviewer    # prints the tier block; sets RR_STAKES/RR_ENGINE/RR_MODEL/RR
   rr_log_route reviewer "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" "$RR_SCOPE" "<yes|no escalated>"
   ```
 
+## Step 0.6 — DeepSeek third voice (HIGH stakes only, ADR-026)
+
+When `RR_STAKES=high`, ALSO run the DeepSeek-v4 third voice — an independent,
+non-Claude family, additive to (never a replacement for) the Codex pass:
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/deepseek-review.sh"
+dsr_run reviewer    # prints the DeepSeek voice block; advisory — a non-zero exit just means "voice unavailable"
+```
+
+- It is **advisory and never blocks.** If it prints `UNAVAILABLE` (no key /
+  unreachable / non-200), note that in the report and proceed — Codex remains the
+  gate. Do NOT degrade or STOP on a DeepSeek failure.
+- Relay its findings as a **distinct voice** (see the DeepSeek section in the
+  handoff format) — do not merge them into Codex's, and do not let your own Claude
+  judgment override either voice.
+- Routine diffs: skip it (high-stakes only — no added routine cost).
+
 ## Your job
 
 1. Identify the diff: `git diff <base>..<head>` (base = merge target, head = current branch).
@@ -141,6 +159,7 @@ Date: <iso>
 Diff: <base>..<head>
 Review tier (ADR-025): <high | routine> — engine <local|codex>, model <RR_MODEL>, escalated <yes|no>
 Preflight (ADR-022): <READY | BLOCKED_NETWORK | BLOCKED_NOCREDS | PROBE_SKIPPED>
+DeepSeek third voice (ADR-026): <ran | UNAVAILABLE: reason | n/a (routine)>
 Cross-family deviation: <no | YES — Claude-only pass, see Decision>
 
 ## Findings
@@ -153,6 +172,9 @@ Cross-family deviation: <no | YES — Claude-only pass, see Decision>
 
 ### NIT (style / preference)
 - `<file>:<line>` — <issue>
+
+## DeepSeek third voice (advisory, ADR-026 — HIGH stakes only)
+<the DeepSeek findings verbatim, or "UNAVAILABLE: <reason>", or "n/a (routine)". Advisory — does not block; surfaced as an independent family alongside Codex.>
 
 ## Overall
 <one of: "Approve", "Approve with non-blocking fixes", "Request changes — blocking issues">
