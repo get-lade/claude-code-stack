@@ -64,15 +64,17 @@ rr_run security-auditor   # sets RR_STAKES/RR_ENGINE/RR_MODEL/RR_EFFORT/RR_SCOPE
 - **Pass 2 (Opus second pass) is UNCHANGED** — it still runs on novel
   crypto/auth/payment regardless of tier. Tiering only changes Pass 1's engine.
 - After auditing, log the route: `rr_log_route security-auditor "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" "$RR_SCOPE" "<yes|no>"`.
-- **DeepSeek third voice (ADR-026 — HIGH stakes only):** when `RR_STAKES=high`, ALSO run an
-  independent DeepSeek-v4 security pass, additive to Codex (Pass 1) and the Opus second pass:
+- **DeepSeek-CN third voice — effectively OFF for security work (ADR-029).** DeepSeek-CN is
+  China-hosted and must never see auth/crypto/secret/RLS/payment code. Security audits are
+  high-stakes by nature, so the helper's data-residency guard will hard-block (return 8) on
+  essentially every security diff. You MAY still invoke it on a genuinely routine, non-sensitive
+  sweep; it self-blocks otherwise:
   ```bash
   source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/deepseek-review.sh"
-  dsr_run security-auditor
+  dsr_run security-auditor   # returns 8 BLOCKED — data-residency on any sensitive content
   ```
-  Advisory — never blocks. `UNAVAILABLE` (no key/unreachable) → note it and proceed; Codex
-  remains the gate. Attribute its findings to `[source: DeepSeek]` in the report; do not merge
-  them into Codex's or override them with your own.
+  Advisory — never blocks the audit. `BLOCKED`/`UNAVAILABLE` → note it and proceed; Codex (Pass 1)
+  + the Opus second pass are the gate. Attribute any findings to `[source: DeepSeek-CN]`.
 
 ## Your job
 

@@ -74,19 +74,23 @@ rr_run reviewer    # prints the tier block; sets RR_STAKES/RR_ENGINE/RR_MODEL/RR
   rr_log_route reviewer "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" "$RR_SCOPE" "<yes|no escalated>"
   ```
 
-## Step 0.6 — DeepSeek third voice (HIGH stakes only, ADR-026)
+## Step 0.6 — DeepSeek-CN third voice (ROUTINE / non-sensitive only, ADR-029)
 
-When `RR_STAKES=high`, ALSO run the DeepSeek-v4 third voice — an independent,
-non-Claude family, additive to (never a replacement for) the Codex pass:
+DeepSeek-CN is **China-hosted** (api.deepseek.com). It must NEVER see high-stakes
+or sensitive code. So run it only when `RR_STAKES=routine` — additive to, never a
+replacement for, the Codex pass:
 
 ```bash
 source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/deepseek-review.sh"
-dsr_run reviewer    # prints the DeepSeek voice block; advisory — a non-zero exit just means "voice unavailable"
+dsr_run reviewer    # ROUTINE only; the helper itself BLOCKS (returns 8) any high-stakes/sensitive diff
 ```
 
-- It is **advisory and never blocks.** If it prints `UNAVAILABLE` (no key /
-  unreachable / non-200), note that in the report and proceed — Codex remains the
-  gate. Do NOT degrade or STOP on a DeepSeek failure.
+- **Data-residency, fail-closed:** the helper hard-blocks (ADR-029) on
+  sensitivity=high, domain-mode security|schema-migration, or any auth/crypto/
+  secret/payment/migration content — regardless of how it's called. If it prints
+  `BLOCKED — data-residency`, that's correct; just note it and move on.
+- It is **advisory and never blocks the review.** `UNAVAILABLE`/`BLOCKED` →
+  note it and proceed; Codex remains the gate. On `RR_STAKES=high`, skip it entirely.
 - Relay its findings as a **distinct voice** (see the DeepSeek section in the
   handoff format) — do not merge them into Codex's, and do not let your own Claude
   judgment override either voice.
@@ -177,7 +181,7 @@ Cross-family deviation: <no | YES — Claude-only pass, see Decision>
 ### NIT (style / preference)
 - `<file>:<line>` — <issue>
 
-## DeepSeek third voice (advisory, ADR-026 — HIGH stakes only)
+## DeepSeek-CN third voice (advisory, ADR-029 — ROUTINE / non-sensitive only)
 <the DeepSeek findings verbatim, or "UNAVAILABLE: <reason>", or "n/a (routine)". Advisory — does not block; surfaced as an independent family alongside Codex.>
 
 ## Overall

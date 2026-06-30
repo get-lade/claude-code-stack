@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "last_audited": "2026-05-16",
   "next_audit_due": "2026-06-16",
   "verification_note": "Model IDs and pricing verified 2026-05-15. /model-audit re-verifies monthly. Verify live before any cost-sensitive operation.",
@@ -67,12 +67,13 @@
         "llama-3.3-70b": { "context_window": 128000 }
       }
     },
-    "deepseek": {
+    "deepseek-cn": {
+      "data_residency": "CHINA — api.deepseek.com is hosted in China. ADR-029: routine/non-sensitive diffs ONLY; the helper hard-blocks high-stakes/sensitive content (auth/crypto/secret/payment/migration, sensitivity=high, domain-mode security|schema-migration).",
       "api_base": "https://api.deepseek.com",
       "endpoint": "/chat/completions",
       "openai_compatible": true,
-      "api_key_keychain": "deepseek-api-key",
-      "api_key_env_fallback": "DEEPSEEK_API_KEY",
+      "api_key_keychain": "deepseek-cn-api-key",
+      "api_key_env_fallback": "DEEPSEEK_CN_API_KEY",
       "supports_caching": true,
       "pricing_note": "billed via the DeepSeek API key; like codex/gemini it is NOT metered into cost_log.",
       "models": {
@@ -91,7 +92,7 @@
           "pricing_verified_date": "2026-06-30"
         }
       },
-      "notes": "ADR-026: DeepSeek-v4 added as a THIRD, INDEPENDENT adversarial voice (advisory, HIGH-stakes only), orchestrated via scripts/lib/deepseek-review.sh. OpenAI-compatible API. Cross-family (ADR-011): DeepSeek is non-Claude — never point it at a Claude model. The deepseek-chat/deepseek-reasoner ids retire 2026-07-24; use the v4 ids. Key in macOS Keychain item 'deepseek-api-key' (env DEEPSEEK_API_KEY in cloud/CI)."
+      "notes": "ADR-026 + ADR-029: DeepSeek-v4 third adversarial voice via scripts/lib/deepseek-review.sh, advisory. CHINA-HOSTED → ROUTINE/non-sensitive diffs ONLY; the helper's data-residency guard hard-blocks (return 8) any high-stakes/sensitive content regardless of caller. Wired into reviewer (routine), effectively-off for security-auditor, and NOT used by red-team (always high-stakes). Cross-family (ADR-011): non-Claude — never point at a Claude model. deepseek-chat/reasoner ids retire 2026-07-24; use v4 ids. Key: macOS Keychain 'deepseek-cn-api-key' (env DEEPSEEK_CN_API_KEY)."
     }
   },
   "subagent_assignments": {
@@ -125,15 +126,7 @@
       "engine": "codex",
       "model": "gpt-5.5",
       "effort": "high",
-      "when": "diff touches auth/crypto/payment/migration/RLS/secret paths, or domain-mode security|schema-migration, or sensitivity=high",
-      "third_voice": {
-        "engine": "deepseek",
-        "model": "deepseek-v4-pro",
-        "advisory": true,
-        "blocks": false,
-        "helper": "scripts/lib/deepseek-review.sh",
-        "when": "HIGH stakes only — additive to the codex pass, never replaces it, never auto-blocks (ADR-026). A missing key / unreachable API degrades to 'voice unavailable', leaving codex as the gate."
-      }
+      "when": "diff touches auth/crypto/payment/migration/RLS/secret paths, or domain-mode security|schema-migration, or sensitivity=high"
     },
     "routine": {
       "engine": "local",
@@ -142,7 +135,16 @@
       "escalation_model": "gpt-5.4",
       "escalation_effort": "medium",
       "when": "everything else; run local Qwen first, escalate to escalation_model only on low-confidence or non-trivial diff",
-      "tier5_note": "When the high-RAM/GPU box arrives, repoint model (and optionally escalation_model) to a larger local model — e.g. qwen2.5-coder:72b / kimi / deepseek-class. A strong enough local model can also absorb the high tier, driving OpenAI review spend toward $0. Track under the Tier-5 local-model expansion plan."
+      "tier5_note": "When the high-RAM/GPU box arrives, repoint model (and optionally escalation_model) to a larger local model — e.g. qwen2.5-coder:72b / kimi / deepseek-class. A strong enough local model can also absorb the high tier, driving OpenAI review spend toward $0. Track under the Tier-5 local-model expansion plan.",
+      "third_voice": {
+        "engine": "deepseek-cn",
+        "model": "deepseek-v4-pro",
+        "advisory": true,
+        "blocks": false,
+        "data_residency": "CHINA",
+        "helper": "scripts/lib/deepseek-review.sh",
+        "when": "ROUTINE / non-sensitive diffs ONLY (ADR-029) — additive to the routine review, never auto-blocks. China-hosted: the helper hard-blocks (return 8) any high-stakes/sensitive content (auth/crypto/secret/payment/migration, sensitivity=high, domain-mode security|schema-migration) regardless of caller. Moved off the high tier — it must never see high-stakes code."
+      }
     }
   },
   "notes": [
