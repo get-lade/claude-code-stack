@@ -19,21 +19,29 @@ The stack calls for red-teaming by a non-Claude model family. Claude Code cannot
 
 ## Your job
 
-For high-stakes code (financial, auth, data migrations, deploy paths), after the reviewer signs off, run the breaking analysis through Gemini from the repo root:
+For high-stakes code (financial, auth, data migrations, deploy paths), after the
+reviewer signs off, run the breaking analysis through the **Gemini API** (the CLI
+is dead as of 2026-06-30 — IneligibleTierError; ADR-012 revised). The API can't
+read the repo itself, so YOU assemble the in-scope diff/files and pipe them in:
 
 ```bash
-gemini --skip-trust -p "Red-team the high-stakes code in this repository: <scope>. Enumerate and test attack vectors: inputs (NULL, empty, huge, wrong type, encoded, SQL/script payloads); state (logged out, expired session, multiple tabs, race conditions); upstream failures (500, timeout, malformed JSON, unexpected shape); downstream failures (DB rejects write, partial failure, pool exhausted); permissions (no permission, expired creds, cross-tenant); replay (duplicate/replayed requests); adversarial (crafted inputs to extract data, escalate privilege, deny service). Score each finding Critical/High/Medium/Low. Describe exploits; do NOT run destructive operations against production."
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/gemini-api.sh"
+{ git diff <base>..<head>; } | \
+  gmn_call "Red-team the high-stakes code in the diff below: <scope>. Enumerate and test attack vectors: inputs (NULL, empty, huge, wrong type, encoded, SQL/script payloads); state (logged out, expired session, multiple tabs, race conditions); upstream failures (500, timeout, malformed JSON, unexpected shape); downstream failures (DB rejects write, partial failure, pool exhausted); permissions (no permission, expired creds, cross-tenant); replay (duplicate/replayed requests); adversarial (crafted inputs to extract data, escalate privilege, deny service). Score each finding Critical/High/Medium/Low. Describe exploits; do NOT run destructive operations against production."
 ```
 
 Capture Gemini's output and structure it into the report below. Do not soften findings.
 
-**If the `gemini` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-012, ADR-015) is red-teaming by a **non-Claude model family** — the *model*, not the *binary*:
+**Cross-family requirement (ADR-012, ADR-015):** red-teaming must run on a
+**non-Claude family**. The path is now the Gemini API only:
 
-1. **CLI on PATH** (`command -v gemini`) → use it as above.
-2. **Else if `printenv GEMINI_API_KEY` is set** → reach Gemini another way (your choice — both satisfy ADR-012): `npm i -g @google/gemini-cli` then run `gemini -p` as above, **or** call the Gemini API directly over HTTP with that key, feeding it the same red-team prompt.
-3. **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not run a Claude-only red-team — adversarial diversity is the entire point of this role.
+1. **`gmn_available`** (env `GEMINI_API_KEY` or Keychain `gemini-api-key`) → use `gmn_call` as above.
+2. **If the key is absent / `gmn_call` prints `UNAVAILABLE`** → STOP and tell the user.
+   Do NOT run a Claude-only red-team — adversarial diversity is the entire point of this role.
+   (The DeepSeek third voice below is NOT a substitute for the mandated Gemini family here.)
 
-In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv GEMINI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
+In cloud sessions the key is normally an **environment variable**; the helper
+reads `GEMINI_API_KEY` automatically. The dead CLI is no longer a fallback. See ADR-015.
 
 ### DeepSeek third voice (ADR-026)
 
