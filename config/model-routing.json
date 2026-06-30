@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "last_audited": "2026-05-16",
   "next_audit_due": "2026-06-16",
   "verification_note": "Model IDs and pricing verified 2026-05-15. /model-audit re-verifies monthly. Verify live before any cost-sensitive operation.",
@@ -38,11 +38,13 @@
     },
     "codex": {
       "invocation": "local Codex CLI — `codex exec` (general) / `codex exec review` (code review)",
-      "auth": "~/.codex/auth.json (Codex CLI login — NOT a Keychain item)",
+      "auth": "~/.codex/auth.json (Codex CLI login)",
+      "api_key_keychain_backup": "openai-api-key",
+      "api_key_env_fallback": "OPENAI_API_KEY",
       "underlying_model": "gpt-5.5 (OpenAI GPT-5.5 family, accessed via Codex)",
       "supports_caching": false,
       "pricing_note": "the maintainered via the Codex CLI account, not the stack's API metering. Codex calls are not metered into cost_log.",
-      "notes": "v1.1.1 adaptation: the stack reaches the OpenAI / GPT-5.5 family through the locally-installed, authenticated Codex CLI rather than a direct OpenAI API key. Claude Code cannot run subagents on non-Claude models, so adversarial roles (reviewer, product-critic, security-auditor) run on a Claude model and orchestrate Codex via bash. Replaces the artifacts' `openai` provider block. See ADR-011."
+      "notes": "v1.1.1 adaptation: the stack reaches the OpenAI / GPT-5.5 family through the locally-installed, authenticated Codex CLI rather than a direct OpenAI API key. Claude Code cannot run subagents on non-Claude models, so adversarial roles (reviewer, product-critic, security-auditor) run on a Claude model and orchestrate Codex via bash. Replaces the artifacts' `openai` provider block. See ADR-011. ADR-028: macOS Keychain item 'openai-api-key' (env OPENAI_API_KEY wins) is a resilient BACKUP for the direct-API rung — scripts/lib/openai-key.sh `oai_export` fills OPENAI_API_KEY from it when unset, so the OpenAI family survives a Codex CLI auth loss (the Gemini-CLI-death lesson, ADR-027)."
     },
     "gemini": {
       "invocation": "local Gemini CLI — `gemini -p \"<prompt>\"` (non-interactive); run from repo root for whole-repo context",

@@ -24,6 +24,10 @@ Before any review work, probe the cross-family path so a break surfaces up front
 instead of five minutes into `codex exec`:
 
 ```bash
+# ADR-028: make the OpenAI Keychain backup (openai-api-key) available to THIS
+# shell if OPENAI_API_KEY isn't already set — so the Codex direct-API rung works
+# even if the Codex CLI auth is gone. Cloud env always wins (no-op when set).
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-key.sh" 2>/dev/null && oai_export || true
 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh"
 # or, if running from the stack repo: bash scripts/lib/cross-family-preflight.sh
 ```

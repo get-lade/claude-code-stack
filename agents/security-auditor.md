@@ -27,6 +27,9 @@ Before any audit work, probe the cross-family path so a break surfaces up front
 instead of five minutes into `codex exec`:
 
 ```bash
+# ADR-028: make the OpenAI Keychain backup (openai-api-key) available to THIS shell
+# if OPENAI_API_KEY isn't set — Codex direct-API rung survives CLI auth loss. Cloud env wins.
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-key.sh" 2>/dev/null && oai_export || true
 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh"
 # or, from the stack repo: bash scripts/lib/cross-family-preflight.sh
 ```
