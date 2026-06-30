@@ -40,7 +40,10 @@ GMN_MODEL="${GEMINI_API_MODEL:-gemini-3.1-pro-preview}"
 GMN_TIMEOUT="${GMN_TIMEOUT:-180}"
 GMN_MAX_INPUT_BYTES="${GMN_MAX_INPUT_BYTES:-700000}"   # bound the prompt+context
 
-gmn_trim() { local s="$1"; printf '%s' "${s//[$' \t\r\n']/}"; }
+# Keep ONLY API-key charset bytes. A whitespace-only strip let a pasted control
+# byte (e.g. \x03) survive and corrupt the header → HTML 400 (2026-06-30 incident).
+# All real keys (sk-…, sk-ant-…, sk-proj-…, AIza…, AQ.…) live in [A-Za-z0-9._-].
+gmn_trim() { printf '%s' "$1" | LC_ALL=C tr -cd 'A-Za-z0-9._-'; }
 
 gmn_key() {
   if [[ -n "${GEMINI_API_KEY:-}" ]]; then
