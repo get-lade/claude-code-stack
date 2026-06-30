@@ -61,6 +61,15 @@ rr_run security-auditor   # sets RR_STAKES/RR_ENGINE/RR_MODEL/RR_EFFORT/RR_SCOPE
 - **Pass 2 (Opus second pass) is UNCHANGED** — it still runs on novel
   crypto/auth/payment regardless of tier. Tiering only changes Pass 1's engine.
 - After auditing, log the route: `rr_log_route security-auditor "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" "$RR_SCOPE" "<yes|no>"`.
+- **DeepSeek third voice (ADR-026 — HIGH stakes only):** when `RR_STAKES=high`, ALSO run an
+  independent DeepSeek-v4 security pass, additive to Codex (Pass 1) and the Opus second pass:
+  ```bash
+  source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/deepseek-review.sh"
+  dsr_run security-auditor
+  ```
+  Advisory — never blocks. `UNAVAILABLE` (no key/unreachable) → note it and proceed; Codex
+  remains the gate. Attribute its findings to `[source: DeepSeek]` in the report; do not merge
+  them into Codex's or override them with your own.
 
 ## Your job
 
@@ -132,7 +141,7 @@ Write `.claude/sessions/<session-id>/security-report.md`:
 Date: <iso>
 Scope: <files / endpoints / DB objects>
 Review tier (ADR-025): <high | routine> — Pass 1 engine <local/Qwen | codex>, model <RR_MODEL>, escalated <yes/no>
-Passes: Pass 1 cross-family (<engine>) + <Opus second pass: yes/no>
+Passes: Pass 1 cross-family (<engine>) + <Opus second pass: yes/no> + DeepSeek third voice (ADR-026): <ran | UNAVAILABLE: reason | n/a (routine)>
 Preflight (ADR-022): <READY | BLOCKED_NETWORK | BLOCKED_NOCREDS | PROBE_SKIPPED>
 Cross-family deviation: <no | YES — Claude-only pass, see Decision>
 

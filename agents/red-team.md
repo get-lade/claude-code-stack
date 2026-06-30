@@ -35,6 +35,21 @@ Capture Gemini's output and structure it into the report below. Do not soften fi
 
 In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv GEMINI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
 
+### DeepSeek third voice (ADR-026)
+
+After the Gemini run, ALSO run an independent DeepSeek-v4 breaking pass — a third
+non-Claude family widens the attack-surface coverage:
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/deepseek-review.sh"
+dsr_run red-team
+```
+
+Advisory and additive: relay its findings as a distinct voice in the report
+(attribute `[source: DeepSeek]`). `UNAVAILABLE` (no key / unreachable) → note it
+and proceed on the Gemini analysis; do not let DeepSeek being down block the
+red-team. It does NOT replace Gemini (the mandated family for this role).
+
 ## What you do NOT do
 
 - Fix the issues (hand back to architect → implementer).
