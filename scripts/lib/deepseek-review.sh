@@ -33,6 +33,10 @@
 # a Claude model. The model id is pinned below and to a DeepSeek-only base URL.
 
 set -uo pipefail
+# Self-audit (DeepSeek, 2026-06-30): defeat xtrace key leakage. If a caller has
+# `set -x` active when this is sourced/run, the curl line (Bearer <key>) would be
+# echoed to the terminal. Disable xtrace for this script's scope.
+{ set +x; } 2>/dev/null
 
 DSR_API_BASE="${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
 DSR_ENDPOINT="${DSR_API_BASE%/}/chat/completions"
@@ -41,14 +45,21 @@ DSR_TIMEOUT="${DSR_TIMEOUT:-120}"
 DSR_MAX_DIFF_BYTES="${DSR_MAX_DIFF_BYTES:-200000}"   # bound the prompt; oversized diffs are truncated with a marker
 
 # --- key resolution (no echo of the secret anywhere) --------------------------
+# Self-audit (DeepSeek, 2026-06-30): strip ALL whitespace from the resolved key.
+# API keys never contain internal whitespace, so a paste artifact, a trailing
+# newline (macOS `security -w` appends one; an env var may carry one too), or a
+# wrapped copy would otherwise corrupt the `Authorization: Bearer <key>` header
+# and 401 with a valid key. Defensive on both the env and Keychain paths.
+dsr_trim() { local s="$1"; printf '%s' "${s//[$' \t\r\n']/}"; }
 
 dsr_key() {
   if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then
-    printf '%s' "$DEEPSEEK_API_KEY"; return 0
+    local k; k="$(dsr_trim "$DEEPSEEK_API_KEY")"
+    [[ -n "$k" ]] && { printf '%s' "$k"; return 0; }
   fi
   if command -v security >/dev/null 2>&1; then
-    local k
-    k="$(security find-generic-password -s deepseek-api-key -w 2>/dev/null)" || return 1
+    local k; k="$(security find-generic-password -s deepseek-api-key -w 2>/dev/null)" || return 1
+    k="$(dsr_trim "$k")"
     [[ -n "$k" ]] && { printf '%s' "$k"; return 0; }
   fi
   return 1
