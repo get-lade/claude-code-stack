@@ -19,10 +19,10 @@
 # 2026-06-30 (api-docs.deepseek.com). The older deepseek-chat/reasoner ids retire
 # 2026-07-24 — pin v4 ids.
 #
-# KEY RESOLUTION (never hardcoded, never logged):
-#   1. $DEEPSEEK_API_KEY            (cloud / CI — the intended cloud mechanism)
-#   2. macOS Keychain item 'deepseek-api-key' via `security find-generic-password`
-#      (local default; matches the anthropic-api-key pattern in model-routing.json)
+# KEY RESOLUTION (never hardcoded, never logged) — CHINA-HOSTED, named -cn (ADR-029):
+#   1. $DEEPSEEK_CN_API_KEY         (cloud / CI — the intended cloud mechanism)
+#   2. macOS Keychain item 'deepseek-cn-api-key' via `security find-generic-password`
+#      (local default; the -cn suffix flags the China data-residency class)
 #
 # USAGE
 #   source "$DIR/deepseek-review.sh"
@@ -45,20 +45,20 @@ DSR_TIMEOUT="${DSR_TIMEOUT:-120}"
 DSR_MAX_DIFF_BYTES="${DSR_MAX_DIFF_BYTES:-200000}"   # bound the prompt; oversized diffs are truncated with a marker
 
 # --- key resolution (no echo of the secret anywhere) --------------------------
-# Self-audit (DeepSeek, 2026-06-30): strip ALL whitespace from the resolved key.
-# API keys never contain internal whitespace, so a paste artifact, a trailing
-# newline (macOS `security -w` appends one; an env var may carry one too), or a
-# wrapped copy would otherwise corrupt the `Authorization: Bearer <key>` header
-# and 401 with a valid key. Defensive on both the env and Keychain paths.
-dsr_trim() { local s="$1"; printf '%s' "${s//[$' \t\r\n']/}"; }
+# Keep ONLY API-key charset bytes (ADR-029). A whitespace-only strip let a pasted
+# control byte (e.g. \x03) survive and corrupt the auth header → 400/401 with a
+# valid key (2026-06-30 incident). All real keys live in [A-Za-z0-9._-].
+dsr_trim() { printf '%s' "$1" | LC_ALL=C tr -cd 'A-Za-z0-9._-'; }
 
+# DeepSeek-CN is the CHINA-HOSTED api.deepseek.com. The key is named with a -cn
+# suffix so its data-residency class is obvious at the call site (ADR-029).
 dsr_key() {
-  if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then
-    local k; k="$(dsr_trim "$DEEPSEEK_API_KEY")"
+  if [[ -n "${DEEPSEEK_CN_API_KEY:-}" ]]; then
+    local k; k="$(dsr_trim "$DEEPSEEK_CN_API_KEY")"
     [[ -n "$k" ]] && { printf '%s' "$k"; return 0; }
   fi
   if command -v security >/dev/null 2>&1; then
-    local k; k="$(security find-generic-password -s deepseek-api-key -w 2>/dev/null)" || return 1
+    local k; k="$(security find-generic-password -s deepseek-cn-api-key -w 2>/dev/null)" || return 1
     k="$(dsr_trim "$k")"
     [[ -n "$k" ]] && { printf '%s' "$k"; return 0; }
   fi
@@ -66,6 +66,29 @@ dsr_key() {
 }
 
 dsr_available() { dsr_key >/dev/null 2>&1; }
+
+# --- data-residency guard (ADR-029) -------------------------------------------
+# DeepSeek-CN is China-hosted. It must NEVER receive high-stakes or sensitive
+# code. This is DEFENSE-IN-DEPTH inside the helper: even if a caller invokes it on
+# the wrong tier, the send is refused fail-closed. Blocks when ANY of:
+#   - STACK_SENSITIVITY=high
+#   - STACK_DOMAIN_MODE in {security, schema-migration}
+#   - the diff (changed paths OR added content) matches the high-stakes regex
+# Changed-file names come from `git diff --name-only`; content from the diff body.
+DSR_BLOCK_RE='(auth|login|oauth|sso|saml|session|token|jwt|passwd|password|secret|credential|crypto|encrypt|decrypt|cipher|hmac|private[_-]?key|mnemonic|seed|vault|kms|totp|mfa|2fa|payment|billing|charge|stripe|payroll|/migrations/|\.sql|rls|policy|\.env|api[_-]?key|BEGIN [A-Z ]*PRIVATE KEY)'
+
+# dsr_residency_block <diff-text> <base> <head> — echoes a reason if blocked, else empty.
+dsr_residency_block() {
+  local diff="$1" base="$2" head="$3"
+  [[ "${STACK_SENSITIVITY:-}" == "high" ]] && { echo "sensitivity=high"; return 0; }
+  case "${STACK_DOMAIN_MODE:-}" in security|schema-migration) echo "domain-mode=${STACK_DOMAIN_MODE}"; return 0;; esac
+  local files hit
+  files="$(git diff --name-only "$base..$head" 2>/dev/null || true)"
+  hit="$(printf '%s\n' "$files" | grep -iE "$DSR_BLOCK_RE" | head -1)"
+  [[ -n "$hit" ]] && { echo "high-stakes path: ${hit}"; return 0; }
+  printf '%s' "$diff" | grep -iEq "$DSR_BLOCK_RE" && { echo "high-stakes content in diff"; return 0; }
+  return 1   # not blocked
+}
 
 # --- diff resolution (mirrors review-router.sh defaults) ----------------------
 
@@ -94,9 +117,9 @@ dsr_run() {
   local key
   if ! key="$(dsr_key)"; then
     cat <<'EOF'
-=== DeepSeek third voice (ADR-026): UNAVAILABLE — no key ===
-Set it once (local): security add-generic-password -a "$USER" -s deepseek-api-key -w 'YOUR_KEY'
-Or export DEEPSEEK_API_KEY (cloud/CI). This voice is advisory — the Codex pass remains the gate.
+=== DeepSeek-CN voice (ADR-026/029): UNAVAILABLE — no key ===
+Set it once (local): security add-generic-password -a "$USER" -s deepseek-cn-api-key -w 'YOUR_KEY'
+Or export DEEPSEEK_CN_API_KEY (cloud/CI). Advisory — the Codex pass remains the gate.
 EOF
     return 2
   fi
@@ -115,6 +138,15 @@ EOF
   if (( ${#diff} > DSR_MAX_DIFF_BYTES )); then
     diff="${diff:0:DSR_MAX_DIFF_BYTES}
 [...diff truncated at ${DSR_MAX_DIFF_BYTES} bytes for the review prompt...]"
+  fi
+
+  # DATA-RESIDENCY GUARD (ADR-029): refuse to send high-stakes / sensitive code to
+  # the China-hosted endpoint, regardless of how the caller invoked us. Fail-closed.
+  local _blk; _blk="$(dsr_residency_block "$diff" "$mb" "$head")"
+  if [[ -n "$_blk" ]]; then
+    echo "=== DeepSeek-CN voice (ADR-029): BLOCKED — data-residency (${_blk}) ==="
+    echo "High-stakes/sensitive code is not sent to the China-hosted DeepSeek API. Codex+Gemini cover this diff."
+    return 8
   fi
 
   # jq builds the JSON body so the diff is safely encoded (no shell interpolation into JSON).

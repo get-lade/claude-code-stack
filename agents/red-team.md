@@ -38,25 +38,17 @@ Capture Gemini's output and structure it into the report below. Do not soften fi
 1. **`gmn_available`** (env `GEMINI_API_KEY` or Keychain `gemini-api-key`) → use `gmn_call` as above.
 2. **If the key is absent / `gmn_call` prints `UNAVAILABLE`** → STOP and tell the user.
    Do NOT run a Claude-only red-team — adversarial diversity is the entire point of this role.
-   (The DeepSeek third voice below is NOT a substitute for the mandated Gemini family here.)
 
 In cloud sessions the key is normally an **environment variable**; the helper
 reads `GEMINI_API_KEY` automatically. The dead CLI is no longer a fallback. See ADR-015.
 
-### DeepSeek third voice (ADR-026)
+### No DeepSeek-CN here (ADR-029)
 
-After the Gemini run, ALSO run an independent DeepSeek-v4 breaking pass — a third
-non-Claude family widens the attack-surface coverage:
-
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/deepseek-review.sh"
-dsr_run red-team
-```
-
-Advisory and additive: relay its findings as a distinct voice in the report
-(attribute `[source: DeepSeek]`). `UNAVAILABLE` (no key / unreachable) → note it
-and proceed on the Gemini analysis; do not let DeepSeek being down block the
-red-team. It does NOT replace Gemini (the mandated family for this role).
+Red-team only ever runs on HIGH-stakes code (financial, auth, data migrations,
+deploy paths). DeepSeek-CN is China-hosted and is **forbidden** from receiving
+high-stakes/sensitive code — its helper data-residency guard hard-blocks every
+red-team diff by construction. So DeepSeek-CN is intentionally NOT a red-team
+voice. Cross-family coverage here is Gemini (mandated) + Codex upstream.
 
 ## What you do NOT do
 
