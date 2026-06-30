@@ -47,13 +47,17 @@
       "notes": "v1.1.1 adaptation: the stack reaches the OpenAI / GPT-5.5 family through the locally-installed, authenticated Codex CLI rather than a direct OpenAI API key. Claude Code cannot run subagents on non-Claude models, so adversarial roles (reviewer, product-critic, security-auditor) run on a Claude model and orchestrate Codex via bash. Replaces the artifacts' `openai` provider block. See ADR-011. ADR-028: macOS Keychain item 'openai-api-key' (env OPENAI_API_KEY wins) is a resilient BACKUP for the direct-API rung — scripts/lib/openai-key.sh `oai_export` fills OPENAI_API_KEY from it when unset, so the OpenAI family survives a Codex CLI auth loss (the Gemini-CLI-death lesson, ADR-027)."
     },
     "gemini": {
-      "invocation": "local Gemini CLI — `gemini -p \"<prompt>\"` (non-interactive); run from repo root for whole-repo context",
-      "auth": "~/.gemini/ (Gemini CLI login — NOT a Keychain item)",
-      "cli_version_verified": "0.42.0 (2026-05-16)",
-      "underlying_model": "gemini-2.5-pro family (Gemini, accessed via the Gemini CLI; CLI selects model, override with -m)",
+      "invocation": "Gemini REST API via scripts/lib/gemini-api.sh (`gmn_call`); the CLI is DEAD (IneligibleTierError, 2026-06-30)",
+      "api_base": "https://generativelanguage.googleapis.com/v1beta",
+      "endpoint": "/models/{model}:generateContent",
+      "auth_header": "x-goog-api-key",
+      "api_key_keychain": "gemini-api-key",
+      "api_key_env_fallback": "GEMINI_API_KEY",
+      "model": "gemini-3.1-pro-preview",
+      "model_verified_date": "2026-06-30",
       "supports_caching": false,
-      "pricing_note": "the maintainered via the Gemini CLI account, not the stack's API metering. Gemini calls are not metered into cost_log.",
-      "notes": "v1.1.1 adaptation: the stack reaches the Gemini family through the locally-installed, authenticated Gemini CLI rather than a direct Google AI Studio API key. Claude Code cannot run subagents on non-Claude models, so Gemini roles (architecture-critic, red-team, historian) run on a Claude model and orchestrate the Gemini CLI via bash. Replaces the artifacts' API-key `google` provider block. See ADR-012."
+      "pricing_note": "billed via the Gemini API key; like codex/deepseek it is NOT metered into cost_log.",
+      "notes": "ADR-012 REVISED 2026-06-30: the Gemini CLI free tier returns IneligibleTierError ('client no longer supported … migrate to Antigravity'), so the CLI path is gone. The Gemini family is now reached via the REST API (scripts/lib/gemini-api.sh), pinned to gemini-3.1-pro-preview — this also resolves the /model-audit recommendation to stop the CLI auto-downgrade to 3.5 Flash. The API has NO filesystem access, so the orchestrating agent assembles repo context and pipes it in (unlike the old CLI). Gemini roles: architecture-critic, red-team, historian. Cross-family (ADR-011): non-Claude — never point at a Claude model. 'preview' model id — revisit at /model-audit."
     },
     "ollama": {
       "base_url": "http://localhost:11434",

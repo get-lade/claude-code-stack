@@ -22,18 +22,25 @@ The stack calls for architectural critique by a non-Claude model family with who
 After the architect produces a plan, for novel / high-stakes / hard-to-reverse decisions:
 
 1. Identify the scope: the architect's plan + the relevant repo subtree + existing ADRs.
-2. Run the systemic critique through Gemini, from the repo root so it has whole-repo context:
+2. Run the systemic critique through the **Gemini API** (the CLI is dead as of
+   2026-06-30 — IneligibleTierError; ADR-012 revised). The API can't read the
+   repo itself, so YOU assemble the plan + the relevant subtree + ADRs and pipe
+   them in (curate to the load-bearing files — the helper caps input size):
    ```bash
-   gemini --skip-trust -p "Adversarially review this architectural plan against the whole repository. Plan: <paste architect's plan>. Check: consistency with the existing architecture; whether it introduces a new pattern where an existing one would do; what it locks the system into globally; whether a past decision (see docs/ADRs/) is being contradicted or silently reversed; where it pushes complexity (complexity usually moves rather than disappears); whether this is the right layer for the concern; cross-repo implications. Generate 1-2 grounded counter-proposals the architect did not consider. Output: challenges + alternatives, severity-ranked."
+   source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/gemini-api.sh"
+   { echo "PLAN:"; cat <plan-file>; echo; echo "EXISTING ADRs + RELEVANT CODE:"; cat docs/ADRs/* <relevant-subtree-files>; } | \
+     gmn_call "Adversarially review this architectural plan against the existing architecture below. Check: consistency; whether it introduces a new pattern where an existing one would do; what it locks the system into globally; whether a past ADR is contradicted or silently reversed; where it pushes complexity (complexity moves rather than disappears); whether this is the right layer; cross-repo implications. Generate 1-2 grounded counter-proposals the architect did not consider. Output: challenges + alternatives, severity-ranked."
    ```
 3. Capture Gemini's output.
 4. Structure it into the report below. Do not soften Gemini's challenges or substitute your own Claude judgment for them.
-5. **If the `gemini` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-012, ADR-015) is critique by a **non-Claude model family** — the *model*, not the *binary*:
-   - **CLI on PATH** (`command -v gemini`) → use it as in step 2.
-   - **Else if `printenv GEMINI_API_KEY` is set** → reach Gemini another way (your choice — both satisfy ADR-012): `npm i -g @google/gemini-cli` then run `gemini -p` as above, **or** call the Gemini API directly over HTTP with that key, feeding it the same critique prompt.
-   - **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not run a Claude-only critique — that loses the cross-family perspective and whole-repo context that are the point of this role.
+5. **Cross-family requirement (ADR-012, ADR-015):** critique must run on a
+   **non-Claude family**. The path is now the Gemini API only:
+   - **`gmn_available`** (env `GEMINI_API_KEY` or Keychain `gemini-api-key`) → use `gmn_call` as above.
+   - **If the key is absent / `gmn_call` prints `UNAVAILABLE`** → STOP and tell the user.
+     Do NOT run a Claude-only critique — that loses the cross-family perspective that is the point.
 
-   In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv GEMINI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
+   In cloud sessions the key is normally an **environment variable**; the helper
+   reads `GEMINI_API_KEY` automatically. The dead CLI is no longer a fallback. See ADR-015.
 
 ## Inputs
 

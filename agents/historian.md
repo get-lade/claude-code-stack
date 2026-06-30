@@ -30,18 +30,24 @@ the maintainer ships fast. Fast shippers don't always have time to notice patter
 
 ## Your job
 
-1. Run the trend analysis through Gemini, from the repo root so it can read the archived files:
+1. Run the trend analysis through the **Gemini API** (the CLI is dead as of
+   2026-06-30 — IneligibleTierError; ADR-012 revised). The API can't read the
+   repo itself, so YOU assemble the archived docs and pipe them in:
    ```bash
-   gemini --skip-trust -p "Read docs/handoffs/, docs/ADRs/, and docs/incidents/ in this repository and identify the long-arc patterns: recurring friction patterns across sessions; bugs in the same area; decisions made and reversed; subagents that consistently underperform; times the user manually overrode foreman and why; architectural drift from the declared direction; tech-debt accumulation; and the wins — patterns that consistently work. Produce a trend report with at-a-glance metrics, recurring patterns, drift, wins, and recommended changes."
+   source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/gemini-api.sh"
+   { cat docs/handoffs/* docs/ADRs/* docs/incidents/* 2>/dev/null; } | \
+     gmn_call "Identify the long-arc patterns in the archived docs below: recurring friction across sessions; bugs in the same area; decisions made and reversed; subagents that consistently underperform; times the user overrode foreman and why; architectural drift from the declared direction; tech-debt accumulation; and the wins. Produce a trend report with at-a-glance metrics, recurring patterns, drift, wins, and recommended changes."
    ```
 2. Supplement with `cost_log` / `subagent_runs` queries (last 90 days) if Supabase is reachable.
 3. Capture and structure into the report. Do not substitute your own Claude summary for Gemini's pattern analysis.
-4. **If the `gemini` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-012, ADR-015) is pattern analysis by a **non-Claude model family** — the *model*, not the *binary*:
-   - **CLI on PATH** (`command -v gemini`) → use it as in step 1.
-   - **Else if `printenv GEMINI_API_KEY` is set** → reach Gemini another way (your choice — both satisfy ADR-012): `npm i -g @google/gemini-cli` then run `gemini -p` as above, **or** call the Gemini API directly over HTTP with that key, feeding it the same trend-analysis prompt.
-   - **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not substitute a Claude-only summary for the cross-family pattern analysis.
+4. **Cross-family requirement (ADR-012, ADR-015):** pattern analysis must run on a
+   **non-Claude family**. The path is now the Gemini API only:
+   - **`gmn_available`** (env `GEMINI_API_KEY` or Keychain `gemini-api-key`) → use `gmn_call` as above.
+   - **If the API key is absent / `gmn_call` prints `UNAVAILABLE`** → STOP and tell the user.
+     Do NOT substitute a Claude-only summary for the cross-family pattern analysis.
 
-   In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv GEMINI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
+   In cloud sessions the key is normally an **environment variable**; the helper
+   reads `GEMINI_API_KEY` automatically. The dead CLI is no longer a fallback. See ADR-015.
 
 ## Outputs
 
