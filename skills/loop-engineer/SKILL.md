@@ -44,6 +44,15 @@ start an unbounded or unverifiable autonomous loop.**
    criterion passes or a bound trips. To stop early, the user runs
    `/loop-engineer clear` (sets `active=false`).
 
+   **Per-iteration self-check.** A loop has no human reviewing each step, so run
+   the *Loop & Self-Check Discipline* (rules 5–10 in the global CLAUDE.md) as the
+   gate every iteration: reproduce-with-test before any fix (5), keep the goal
+   machine-verifiable (6), debug in one disciplined pass (7), justify every new
+   dependency (8), report uncertainty honestly rather than bluff (9), and **stop
+   immediately** on a named failure mode — Kitchen Sink, Wrong Abstraction,
+   Optimistic Path, Runaway Refactor (10). A wrong direction with no reviewer
+   compounds fast; these six are what catch it before the cap does.
+
 ## Spec contract
 
 See `docs/superpowers/specs/2026-06-20-loop-engineering-design.md` §3 for the

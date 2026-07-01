@@ -10,8 +10,10 @@
 | **YAGNI** | You Aren't Gonna Need It — don't build unused features |
 
 > These principles converge with Andrej Karpathy's widely-shared LLM-coding
-> rules (think-before-coding, simplicity-first, surgical-changes, goal-driven).
-> The stack encodes them directly here rather than vendoring a separate skill.
+> rules. The four original rules (think-before-coding, simplicity-first,
+> surgical-changes, goal-driven) live in Core + Working Principles above; the
+> six loop-era additions are the Loop & Self-Check Discipline below. The stack
+> encodes all ten directly here rather than vendoring a separate skill.
 
 ## Working Principles (Always Active)
 
@@ -19,6 +21,21 @@
 2. **Minimum code that solves the problem. Nothing speculative.** No "while I'm here" refactors, no helpers for hypothetical second callers, no abstractions for cases that don't exist yet.
 3. **Touch only what you must. Clean up only your own mess.** Don't reformat unrelated lines, don't rename unrelated variables, don't fix unrelated lints. If you made a mess in this task, clean it before finishing — but stay out of code you didn't have to touch.
 4. **Define success criteria. Loop until verified.** Before starting, state what "done" looks like in observable terms (test passes, value matches, screenshot diffs). Don't claim done until you've actually checked against that criterion.
+
+## Loop & Self-Check Discipline (Always Active)
+
+Karpathy's six loop-era additions. They matter most when iterating without a human reviewing each step (autonomous loops), but apply turn-by-turn too. In a governed loop the test is the only reviewer, so a wrong direction compounds — these six are what catch it.
+
+5. **Verification — reproduce before you fix.** For a bug: first write a test that reliably reproduces it, then fix the code, then run the test. The bug is fixed when the test passes — never when it "feels" fixed.
+6. **Goal-driven — verifiable "done" before code.** Define success in terms a machine can check ("blank and malformed email both show a specific error, both covered by passing tests"), not prose ("add validation"). Multi-step work gets a plan before the first line, before an hour of generation runs the wrong way.
+7. **Debugging — one disciplined pass, not a guess.** Read the full error and stack trace. Reproduce the problem before attempting a fix. Change one variable at a time. No confident fix for a cause you haven't confirmed exists.
+8. **Dependencies — every package is permanent, uncontrolled code** updated by someone else on a schedule you don't control. Prefer the standard library; before adding a dependency ask whether stdlib covers it, and if you add one, document why.
+9. **Communication — useful uncertainty, never vague reassurance.** "I'm not sure this library supports streaming" is actionable; "I think this should work" is not. State what you don't know instead of guessing confidently.
+10. **Named failure modes — recognize and STOP.** If you catch yourself in any of these mid-task, stop immediately rather than pushing to completion:
+    - **Kitchen Sink** — asked to fix a faucet, renovating the kitchen.
+    - **Wrong Abstraction** — the same logic in three places, never extracted to a function.
+    - **Optimistic Path** — only the happy case; bad inputs, dropped connections, and server failures ignored.
+    - **Runaway Refactor** — one file becomes ten because nothing stopped the cascade.
 
 ## Auto Mode Scope (overrides auto-mode defaults)
 
