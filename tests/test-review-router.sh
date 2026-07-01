@@ -170,6 +170,26 @@ R="$(build_repo src/auth/login.ts)"
 assert_eq "high tier unaffected by local availability" \
   "codex|gpt-5.5|high|diff|" "$(eval_vars "$R" REVIEW_ASSUME_NO_LOCAL=1)"
 
+# --- 11. shell-portability: rr_run must populate RR_ENGINE/RR_MODEL under the
+# shell the review subagents actually source this from (zsh on macOS), not only
+# bash. Regression guard for the ${!name} bad-substitution bug — rr_resolve
+# raised "bad substitution" under zsh and returned an empty engine/model, so
+# callers fell back to a hardcoded rung. Every other test forces `bash -c`,
+# which is exactly why the bug went undetected.
+R="$(build_repo docs/notes.md)"
+run_vars_under() { # <shell> <repo> -> "ENGINE|MODEL" ('' if sourcing/resolve fails)
+  local shell="$1" repo="$2"
+  ( cd "$repo"; REVIEW_ASSUME_LOCAL=1 "$shell" -c "source '$LIB'; rr_run x main HEAD >/dev/null 2>&1; echo \"\$RR_ENGINE|\$RR_MODEL\"" 2>/dev/null )
+}
+for shell in bash zsh; do
+  if command -v "$shell" >/dev/null 2>&1; then
+    assert_eq "routine route populates engine/model under $shell" \
+      "local|qwen2.5-coder:32b" "$(run_vars_under "$shell" "$R")"
+  else
+    echo "SKIP: $shell not on PATH (portability check)"
+  fi
+done
+
 echo "----------------------------------------"
 echo "review-router: PASS=$PASS FAIL=$FAIL"
 [[ "$FAIL" -eq 0 ]]

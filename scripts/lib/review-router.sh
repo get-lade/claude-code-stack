@@ -76,7 +76,14 @@ RR_CLAUDE_RE='claude|anthropic|opus|sonnet|haiku|fable'
 # honored.
 rr_resolve() {
   local env_name="$1" jq_path="$2" def="$3" out=""
-  local env_val="${!env_name:-}"
+  # Indirect env read via eval, NOT ${!env_name}. ${!name} is a bash-only
+  # expansion; under zsh — the shell the review subagents source this from —
+  # it raises "bad substitution", which aborted rr_resolve mid-function and
+  # returned an EMPTY engine/model (callers then fell back to a hardcoded rung).
+  # eval works identically in bash and zsh. env_name is always a fixed literal
+  # from the call sites below; the identifier guard keeps the eval injection-free.
+  local env_val=""
+  [[ "$env_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && eval "env_val=\${$env_name:-}"
   if [[ -n "$env_val" ]]; then
     out="$env_val"
   else
