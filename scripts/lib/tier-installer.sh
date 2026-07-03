@@ -59,9 +59,12 @@ check_tier_requirements() {
   local manifest="$2"
 
   local reqs
-  reqs="$(jq -r '.requirements // [] | .[] | "\(.type)|\(.name // .ref // "")"' "$manifest")"
+  # advisory (ADR-030): an advisory command requirement WARNS on absence instead
+  # of failing the install — for a tool the default config no longer needs (e.g.
+  # the codex CLI once codex_transport defaults to api).
+  reqs="$(jq -r '.requirements // [] | .[] | "\(.type)|\(.name // .ref // "")|\(.advisory // false)"' "$manifest")"
 
-  while IFS='|' read -r type name; do
+  while IFS='|' read -r type name advisory; do
     [[ -z "$type" ]] && continue
 
     case "$type" in
@@ -78,7 +81,9 @@ check_tier_requirements() {
         ;;
       command)
         if ! command -v "$name" > /dev/null 2>&1; then
-          if [[ -n "${SKIP_REQUIREMENTS:-}" ]]; then
+          if [[ "$advisory" == "true" ]]; then
+            echo "    [requirement-warn] Optional command missing: $name (advisory — not required for the default config; ADR-030)"
+          elif [[ -n "${SKIP_REQUIREMENTS:-}" ]]; then
             echo "    [requirement-skip] Command missing: $name"
           else
             echo "    [requirement-fail] Command missing: $name"

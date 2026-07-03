@@ -10,7 +10,7 @@ allowed_invokes: []
 forbidden_invokes:
   - implementer
 context_caching: false
-description: Proactive security review. The primary OWASP/RLS/secret-handling pass runs through Codex (OpenAI GPT-5.5 family) via the local Codex CLI — different family from Claude. A belt-and-suspenders Claude Opus pass follows on novel crypto/auth code. Distinct from red-team — security-auditor reviews code patterns; red-team attempts active exploits. See ADR-011.
+description: Proactive security review. The primary OWASP/RLS/secret-handling pass runs through the OpenAI GPT-5.5 family — reached via the OpenAI API by default, or the Codex CLI when codex_transport=cli (ADR-030) — a different family from Claude. A belt-and-suspenders Claude Opus pass follows on novel crypto/auth code. Distinct from red-team — security-auditor reviews code patterns; red-team attempts active exploits. See ADR-011.
 ---
 
 # Security Auditor
@@ -30,6 +30,7 @@ instead of five minutes into `codex exec`:
 # ADR-028: make the OpenAI Keychain backup (openai-api-key) available to THIS shell
 # if OPENAI_API_KEY isn't set — Codex direct-API rung survives CLI auth loss. Cloud env wins.
 source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-key.sh" 2>/dev/null && oai_export || true
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-review.sh" 2>/dev/null || true  # oair_call (ADR-030)
 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh"
 # or, from the stack repo: bash scripts/lib/cross-family-preflight.sh
 ```
@@ -83,7 +84,7 @@ For any code touching auth, data access, secrets, or external inputs:
 ### Pass 1 — cross-family (routed engine from Step 0.5, scoped to the diff)
 
 Run the audit prompt on the routed engine/model:
-- **high or escalation / Codex:** `codex exec -m "$RR_MODEL" -c model_reasoning_effort="$RR_EFFORT" "<audit prompt>"`
+- **high or escalation / OpenAI family:** `git diff <base>..<head> | oair_call "<audit prompt>" "$RR_MODEL" "$RR_EFFORT"` — the helper (ADR-030) uses the OpenAI API by default, or `codex exec` when `codex_transport=cli` (auto API fallback).
 - **routine / local:** `ollama run "$RR_MODEL"` with the same prompt, diff piped in.
 
 Audit prompt (both engines): `"Security-audit the current changes (diff <base>..<head>). Sweep for: OWASP Top 10 (injection, broken auth, sensitive data exposure, etc.); hardcoded secrets (must be in env/Keychain, never in code); input validation on every external input; output sanitization; Supabase RLS coverage and policy correctness; crypto using current best-practice libraries; logging hygiene (no PII/secrets); error messages that don't leak internal state; auth flows with no bypass paths. Output findings as CRITICAL / HIGH / MEDIUM / LOW with file:line."`
@@ -98,12 +99,7 @@ For first-of-its-kind crypto / auth / payment code only: after Codex, do a secon
 
 Merge both passes into the report. Attribute each finding to its source (Codex / Opus).
 
-**If Step 0 returned `READY` but `codex` isn't on PATH — walk this ladder.** The requirement (ADR-011, ADR-015) is an audit by a **non-Claude model family** — the *model*, not the *binary*:
-
-1. **CLI on PATH** (`command -v codex`) → use it for Pass 1 as above.
-2. **Else if `printenv OPENAI_API_KEY` is set and the API is reachable** (Step 0 said `READY`) → reach GPT-5.5 another way (your choice — both satisfy ADR-011): `npm i -g @openai/codex` then run `codex exec` as above, **or** call the OpenAI API directly over HTTP with that key, feeding it the same audit prompt.
-
-In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv OPENAI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
+**Transport is handled by `oair_call`, not by you (ADR-030).** The requirement (ADR-011, ADR-015) is an audit by a **non-Claude model family** — the *model*, not the *binary*. `oair_call` resolves `codex_transport` itself: `api` (default) calls the OpenAI API with `OPENAI_API_KEY` (env or Keychain `openai-api-key`) and never touches the CLI; `cli` (opt-in) runs `codex exec` and **falls back to the API automatically** on any failure (missing, quarantine-blocked, not-authenticated). You never branch on "is codex on PATH" — a blocked or absent CLI can no longer strand Pass 1. See ADR-030.
 
 ## Graceful degradation (ADR-022 — when Step 0 was NOT `READY`)
 

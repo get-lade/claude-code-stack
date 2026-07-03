@@ -19,7 +19,7 @@
   },
   "requirements": [
     { "type": "command", "name": "gemini" },
-    { "type": "command", "name": "codex" }
+    { "type": "command", "name": "codex", "advisory": true }
   ],
   "smoke_tests": [
     "test -f ~/.claude/agents/performance-engineer.md",
@@ -29,7 +29,9 @@
     "test -f ~/.claude/agents/architecture-critic.md",
     "test -f ~/.claude/agents/accessibility-auditor.md",
     "test -f ~/.claude/config/domain-modes.json",
-    "command -v gemini",
+    "command -v gemini"
+  ],
+  "advisory_smoke_tests": [
     "command -v codex"
   ],
   "notes": {

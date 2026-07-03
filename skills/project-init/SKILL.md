@@ -103,6 +103,7 @@ Walk through groups in order. For each setting: show default, ask user.
 - Orchestration mode (main-thread | agent-teams | hybrid)
 - Strict mode (on | off)
 - Approval gates (configurable list)
+- Codex review transport (api | cli) — `api` (default) reaches the OpenAI/GPT-5.5 adversarial-review family via the OpenAI API; `cli` uses the codex CLI with automatic API fallback (ADR-030). Tier 2+ only; writes `review.codex_transport`. Most users keep `api`.
 
 **Group 3: Subagent activation**
 - Active subagents (list, defaults from tier)
@@ -131,7 +132,7 @@ Then ask: "Should this also become your default for new projects?"
 
 ```json
 {
-  "stack_version": "1.1.4",
+  "stack_version": "1.1.5",
   "stack_tier": <chosen>,
   "purpose": "<one-line>",
   "created": "<YYYY-MM-DD>",
@@ -144,6 +145,7 @@ Then ask: "Should this also become your default for new projects?"
   "required_approvals": [...],
   "model_overrides": {},
   "skill_overrides": {},
+  "review": { "codex_transport": "api" },
   "cost_protection": {
     "per_session_alert_usd": 5.00,
     "per_day_alert_usd": 50.00,

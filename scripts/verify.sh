@@ -134,6 +134,15 @@ else
       [[ -z "$test" ]] && continue
       run_test "$test"
     done <<< "$tests"
+
+    # advisory_smoke_tests (ADR-030): warn, never fail — for capabilities the
+    # default config does not need (e.g. `command -v codex` once the OpenAI
+    # family reaches GPT-5.5 via the API by default; the CLI is opt-in).
+    adv="$(jq -r '.advisory_smoke_tests // [] | .[]' "$manifest")"
+    while IFS= read -r test; do
+      [[ -z "$test" ]] && continue
+      soft_check "$test" "$test" "$test (advisory — needed only for codex_transport=cli; ADR-030)"
+    done <<< "$adv"
   done
 fi
 

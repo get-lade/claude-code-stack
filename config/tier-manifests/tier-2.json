@@ -53,6 +53,7 @@
       { "from": "scripts/lib/deepseek-review.sh", "to": "~/.claude/scripts/lib/deepseek-review.sh", "executable": true },
       { "from": "scripts/lib/gemini-api.sh", "to": "~/.claude/scripts/lib/gemini-api.sh", "executable": true },
       { "from": "scripts/lib/openai-key.sh", "to": "~/.claude/scripts/lib/openai-key.sh", "executable": true },
+      { "from": "scripts/lib/openai-review.sh", "to": "~/.claude/scripts/lib/openai-review.sh", "executable": true },
       { "from": "hooks/loop-cost-monitor.sh", "to": "~/.claude/hooks/loop-cost-monitor.sh", "executable": true },
       { "from": "hooks/design-gate.sh", "to": "~/.claude/hooks/design-gate.sh", "executable": true },
       { "from": "hooks/loop-cost-accrual.sh", "to": "~/.claude/hooks/loop-cost-accrual.sh", "executable": true },
@@ -64,7 +65,7 @@
   },
   "requirements": [
     { "type": "command", "name": "jq" },
-    { "type": "command", "name": "codex" },
+    { "type": "command", "name": "codex", "advisory": true },
     { "type": "supabase_project", "name": "<your-supabase-ref>" }
   ],
   "smoke_tests": [
@@ -101,7 +102,6 @@
     "test -x ~/.claude/hooks/subagent-log.sh",
     "test -x ~/.claude/hooks/subagent-complete-log.sh",
     "test -x ~/.claude/hooks/dispatch-nudge.sh",
-    "command -v codex",
     "test -x ~/.claude/hooks/workflow-roster-check.sh",
     "jq -e '[.hooks.PreToolUse[]? | select(.matcher==\"Agent\")] | length >= 1' ~/.claude/settings.json",
     "jq -e '[.hooks.PreToolUse[]? | select(.matcher==\"Workflow\")] | length >= 1' ~/.claude/settings.json",
@@ -132,8 +132,12 @@
     "test -x ~/.claude/scripts/lib/review-router.sh",
     "test -x ~/.claude/scripts/lib/deepseek-review.sh",
     "test -x ~/.claude/scripts/lib/gemini-api.sh",
-    "test -x ~/.claude/scripts/lib/openai-key.sh"
+    "test -x ~/.claude/scripts/lib/openai-key.sh",
+    "test -x ~/.claude/scripts/lib/openai-review.sh"
+  ],
+  "advisory_smoke_tests": [
+    "command -v codex"
   ],
   "manifest_format_note": "Tier-2 manifest uses the same files.global / from-to / smoke_tests format as tier 0, 1, 3, 4, 5 and the install.sh / verify.sh scripts. Artifact 3's draft used a divergent installs.* / src-dest / verify structure that the installer does not read — corrected here for consistency. See Tier 2 install log.",
-  "codex_note": "Artifact 3's tier-2 manifest required Keychain item `openai-api-key`. Per the maintainer's decision (2026-05-16, ADR-011), OpenAI-family work routes through the local Codex CLI instead — the requirement is now `command: codex`."
+  "codex_note": "ADR-030: the OpenAI/GPT-5.5 family reaches review via the OpenAI API by DEFAULT (scripts/lib/openai-review.sh, oair_call); the codex CLI is an opt-in transport (codex_transport=cli). So `command: codex` is now ADVISORY (requirements[].advisory + advisory_smoke_tests) — a missing codex CLI warns, never fails the install. Earlier: ADR-011 routed OpenAI-family work through the local Codex CLI (hard requirement `command: codex`)."
 }
