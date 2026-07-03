@@ -58,7 +58,23 @@ _oair_keylib="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-key.sh"
 # shellcheck source=/dev/null
 [[ -f "$_oair_keylib" ]] && source "$_oair_keylib"
 
-OAIR_API_BASE="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+# ADR-030 hardening: the base-URL override is honored ONLY when its host is the
+# pinned vendor host. A stray/compromised OPENAI_BASE_URL pointing elsewhere is
+# IGNORED (never receives the key+diff); we warn and fall back to the default so a
+# misconfigured env can't strand the review. Host match is EXACT — scheme,
+# userinfo (user@host) and :port are stripped first so `...@evil.com` can't sneak
+# past. The override value is never echoed (it may carry embedded credentials).
+OAIR_ALLOWED_HOST="api.openai.com"
+_oair_url_host() { local u="${1#*://}"; u="${u%%/*}"; u="${u##*@}"; u="${u%%:*}"; printf '%s' "$u" | LC_ALL=C tr '[:upper:]' '[:lower:]'; }
+_oair_resolve_base() {
+  local def="https://api.openai.com/v1" ov="${OPENAI_BASE_URL:-}"
+  if [[ -n "$ov" ]]; then
+    [[ "$(_oair_url_host "$ov")" == "$OAIR_ALLOWED_HOST" ]] && { printf '%s' "$ov"; return; }
+    echo "[openai-review] IGNORING OPENAI_BASE_URL (host not on allowlist '${OAIR_ALLOWED_HOST}') — using the pinned default (ADR-030 hardening)." >&2
+  fi
+  printf '%s' "$def"
+}
+OAIR_API_BASE="$(_oair_resolve_base)"
 OAIR_ENDPOINT="${OAIR_API_BASE%/}/chat/completions"
 OAIR_MODEL="${OPENAI_REVIEW_MODEL:-gpt-5.5}"
 OAIR_TIMEOUT="${OAIR_TIMEOUT:-420}"   # gpt-5.5@high on a real ~70KB diff exceeds 180s (ADR-030 dogfood); 420 is the observed headroom
@@ -165,12 +181,17 @@ EOF
       '{model:$model, messages:[{role:"user",content:$content}], stream:false}')"
   fi
 
+  # ADR-030 hardening: the auth header is piped in on stdin (-H @-), NOT passed on
+  # the command line, so the key never lands in this curl's argv (visible to other
+  # local users via `ps`/`/proc`). pipefail preserves curl's exit code (e.g. 28 on
+  # --max-time) through the pipe, so the timeout/network branches below still fire.
   local resp http crc
-  resp="$(curl -sS --max-time "$OAIR_TIMEOUT" -w '\n%{http_code}' \
-    -H "Authorization: Bearer ${key}" \
-    -H 'Content-Type: application/json' \
-    -d "$body" \
-    "$OAIR_ENDPOINT" 2>/dev/null)"; crc=$?
+  resp="$(printf 'Authorization: Bearer %s\n' "$key" \
+    | curl -sS --max-time "$OAIR_TIMEOUT" -w '\n%{http_code}' \
+      -H @- \
+      -H 'Content-Type: application/json' \
+      -d "$body" \
+      "$OAIR_ENDPOINT" 2>/dev/null)"; crc=$?
   if [[ $crc -ne 0 ]]; then
     # Distinguish a slow-but-working path (curl 28 = --max-time exceeded) from a
     # genuinely broken one, so a consuming agent doesn't misread a timeout as

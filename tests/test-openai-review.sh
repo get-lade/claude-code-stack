@@ -81,6 +81,56 @@ else
   echo "SKIP: zsh not available"
 fi
 
+# --- ADR-030: base-URL allowlist (honor override only for the pinned vendor host)
+# OAIR_ENDPOINT is computed at source time, so we source with OPENAI_BASE_URL set.
+base_endpoint() { # base_endpoint <OPENAI_BASE_URL-or-empty>
+  local ov="$1" d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 1
+    if [[ -n "$ov" ]]; then export OPENAI_BASE_URL="$ov"; else unset OPENAI_BASE_URL; fi
+    # shellcheck disable=SC1090
+    source "$LIB" 2>/dev/null
+    printf '%s' "$OAIR_ENDPOINT"
+  )
+  rm -rf "$d"
+}
+check "base: default => api.openai.com"          "https://api.openai.com/v1/chat/completions"  "$(base_endpoint '')"
+check "base: same-host override honored"         "https://api.openai.com/v2/chat/completions"  "$(base_endpoint 'https://api.openai.com/v2')"
+check "base: foreign host ignored => default"    "https://api.openai.com/v1/chat/completions"  "$(base_endpoint 'https://evil.example.com/v1')"
+check "base: userinfo trick ignored => default"  "https://api.openai.com/v1/chat/completions"  "$(base_endpoint 'https://api.openai.com@evil.example.com/v1')"
+
+# --- ADR-030: the API key is fed to curl on stdin (-H @-), NEVER on argv --------
+# A fake `curl` on PATH records its argv and its stdin so we can assert the secret
+# lands only on the piped header line, not in the process command line.
+argv_off_test() {
+  local d; d="$(mktemp -d)"
+  cat > "$d/curl" <<'SH'
+#!/usr/bin/env bash
+{ printf '%s ' "$@"; } > "$CURL_ARGV_OUT"
+cat > "$CURL_STDIN_OUT"
+printf '%s\n%s' '{"choices":[{"message":{"content":"ok"}}]}' '200'
+SH
+  chmod +x "$d/curl"
+  (
+    export CURL_ARGV_OUT="$d/argv" CURL_STDIN_OUT="$d/stdin"
+    export PATH="$d:$PATH"
+    export OPENAI_API_KEY="SECRET-abc123"
+    # shellcheck disable=SC1090
+    source "$LIB"
+    oair_api_call "review this" gpt-5.5 "" </dev/null >/dev/null 2>&1
+  )
+  local argv stdin
+  argv="$(cat "$d/argv" 2>/dev/null || true)"
+  stdin="$(cat "$d/stdin" 2>/dev/null || true)"
+  rm -rf "$d"
+  if [[ "$argv" != *SECRET-abc123* && "$stdin" == *"Authorization: Bearer SECRET-abc123"* ]]; then
+    pass "auth key off argv, fed via -H @- on stdin"
+  else
+    fail "auth key off argv" "argv_has_key=$([[ "$argv" == *SECRET-abc123* ]] && echo yes || echo no); stdin_has_key=$([[ "$stdin" == *SECRET-abc123* ]] && echo yes || echo no)"
+  fi
+}
+argv_off_test
+
 echo
 echo "openai-review: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

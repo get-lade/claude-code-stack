@@ -35,7 +35,23 @@
 set -uo pipefail
 { set +x; } 2>/dev/null   # never echo the key under a caller's xtrace (ADR-026 lesson)
 
-GMN_API_BASE="${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}"
+# ADR-030 hardening: honor GEMINI_BASE_URL ONLY when its host is the pinned
+# vendor host; a stray/compromised value pointing elsewhere is IGNORED (never
+# receives the key+context), warned, and replaced by the default so a
+# misconfigured env can't strand the review. Host match is EXACT — scheme,
+# userinfo and :port are stripped so `...@evil.com` can't sneak past. The
+# override value is never echoed (it may carry embedded credentials).
+GMN_ALLOWED_HOST="generativelanguage.googleapis.com"
+_gmn_url_host() { local u="${1#*://}"; u="${u%%/*}"; u="${u##*@}"; u="${u%%:*}"; printf '%s' "$u" | LC_ALL=C tr '[:upper:]' '[:lower:]'; }
+_gmn_resolve_base() {
+  local def="https://generativelanguage.googleapis.com/v1beta" ov="${GEMINI_BASE_URL:-}"
+  if [[ -n "$ov" ]]; then
+    [[ "$(_gmn_url_host "$ov")" == "$GMN_ALLOWED_HOST" ]] && { printf '%s' "$ov"; return; }
+    echo "[gemini-api] IGNORING GEMINI_BASE_URL (host not on allowlist '${GMN_ALLOWED_HOST}') — using the pinned default (ADR-030 hardening)." >&2
+  fi
+  printf '%s' "$def"
+}
+GMN_API_BASE="$(_gmn_resolve_base)"
 GMN_MODEL="${GEMINI_API_MODEL:-gemini-3.1-pro-preview}"
 GMN_TIMEOUT="${GMN_TIMEOUT:-180}"
 GMN_MAX_INPUT_BYTES="${GMN_MAX_INPUT_BYTES:-700000}"   # bound the prompt+context
@@ -89,11 +105,15 @@ EOF
 
   local body resp http
   body="$(jq -nc --arg t "$full" '{contents:[{parts:[{text:$t}]}]}')"
-  resp="$(curl -sS --max-time "$GMN_TIMEOUT" -w '\n%{http_code}' \
-    -H "x-goog-api-key: ${key}" \
-    -H 'Content-Type: application/json' \
-    -d "$body" \
-    "${GMN_API_BASE%/}/models/${GMN_MODEL}:generateContent" 2>/dev/null)" \
+  # ADR-030 hardening: the API key is piped in on stdin (-H @-), NOT on the command
+  # line, so it never lands in this curl's argv (visible via `ps`/`/proc`).
+  # pipefail preserves curl's exit status through the pipe for the || branch below.
+  resp="$(printf 'x-goog-api-key: %s\n' "$key" \
+    | curl -sS --max-time "$GMN_TIMEOUT" -w '\n%{http_code}' \
+      -H @- \
+      -H 'Content-Type: application/json' \
+      -d "$body" \
+      "${GMN_API_BASE%/}/models/${GMN_MODEL}:generateContent" 2>/dev/null)" \
     || { echo "=== Gemini API: UNAVAILABLE — request failed (network/timeout) ==="; return 5; }
   http="${resp##*$'\n'}"; resp="${resp%$'\n'*}"
 
