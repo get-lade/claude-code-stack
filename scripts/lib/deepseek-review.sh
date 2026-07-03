@@ -38,7 +38,23 @@ set -uo pipefail
 # echoed to the terminal. Disable xtrace for this script's scope.
 { set +x; } 2>/dev/null
 
-DSR_API_BASE="${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
+# ADR-030 hardening: honor DEEPSEEK_BASE_URL ONLY when its host is the pinned
+# vendor host; a stray/compromised value pointing elsewhere is IGNORED (never
+# receives the key+diff), warned, and replaced by the default. Doubly important
+# here — the -cn key is China-hosted (ADR-029) and must not be redirected to an
+# arbitrary host. Host match is EXACT — scheme, userinfo and :port are stripped so
+# `...@evil.com` can't sneak past. The override value is never echoed.
+DSR_ALLOWED_HOST="api.deepseek.com"
+_dsr_url_host() { local u="${1#*://}"; u="${u%%/*}"; u="${u##*@}"; u="${u%%:*}"; printf '%s' "$u" | LC_ALL=C tr '[:upper:]' '[:lower:]'; }
+_dsr_resolve_base() {
+  local def="https://api.deepseek.com" ov="${DEEPSEEK_BASE_URL:-}"
+  if [[ -n "$ov" ]]; then
+    [[ "$(_dsr_url_host "$ov")" == "$DSR_ALLOWED_HOST" ]] && { printf '%s' "$ov"; return; }
+    echo "[deepseek-review] IGNORING DEEPSEEK_BASE_URL (host not on allowlist '${DSR_ALLOWED_HOST}') — using the pinned default (ADR-030 hardening)." >&2
+  fi
+  printf '%s' "$def"
+}
+DSR_API_BASE="$(_dsr_resolve_base)"
 DSR_ENDPOINT="${DSR_API_BASE%/}/chat/completions"
 DSR_MODEL="${DEEPSEEK_REVIEW_MODEL:-deepseek-v4-pro}"
 DSR_TIMEOUT="${DSR_TIMEOUT:-120}"
@@ -157,12 +173,17 @@ EOF
     --arg diff "$diff" \
     '{model:$model, messages:[{role:"system",content:$sys},{role:"user",content:("Diff under review:\n\n"+$diff)}], temperature:0, stream:false}')"
 
+  # ADR-030 hardening: the auth header is piped in on stdin (-H @-), NOT on the
+  # command line, so the key never lands in this curl's argv (visible via
+  # `ps`/`/proc`). pipefail preserves curl's exit status through the pipe for the
+  # || branch below.
   local resp http
-  resp="$(curl -sS --max-time "$DSR_TIMEOUT" -w '\n%{http_code}' \
-    -H "Authorization: Bearer ${key}" \
-    -H 'Content-Type: application/json' \
-    -d "$body" \
-    "$DSR_ENDPOINT" 2>/dev/null)" || { echo "=== DeepSeek third voice: UNAVAILABLE — request failed (network/timeout) ==="; return 5; }
+  resp="$(printf 'Authorization: Bearer %s\n' "$key" \
+    | curl -sS --max-time "$DSR_TIMEOUT" -w '\n%{http_code}' \
+      -H @- \
+      -H 'Content-Type: application/json' \
+      -d "$body" \
+      "$DSR_ENDPOINT" 2>/dev/null)" || { echo "=== DeepSeek third voice: UNAVAILABLE — request failed (network/timeout) ==="; return 5; }
   http="${resp##*$'\n'}"
   resp="${resp%$'\n'*}"
 
