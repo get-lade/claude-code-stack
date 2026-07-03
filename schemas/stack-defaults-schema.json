@@ -72,7 +72,8 @@
         "explanation_verbosity": { "type": "string", "enum": ["minimal", "normal", "teaching"], "default": "normal" },
         "orchestration_mode": { "type": "string", "enum": ["main-thread", "agent-teams", "hybrid", "dynamic-workflows"] },
         "cost_alert_sensitivity": { "type": "string", "enum": ["relaxed", "normal", "strict"], "default": "normal" },
-        "passive_suggest": { "type": "boolean", "default": true, "description": "When true, dispatch-nudge.sh appends a pointer to the recommend-capabilities engine." }
+        "passive_suggest": { "type": "boolean", "default": true, "description": "When true, dispatch-nudge.sh appends a pointer to the recommend-capabilities engine." },
+        "simple_talk": { "type": "string", "enum": ["off", "plain", "caveman"], "default": "off", "description": "v1.3 (ADR-032): plainness modifier (off/plain/caveman), orthogonal to communication_style. Injected each turn by hooks/simple-talk.sh." }
       },
       "additionalProperties": false
     }

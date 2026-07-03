@@ -25,6 +25,7 @@ value first (marked "(current)"). Keep it to these:
 | Pref | Options |
 |---|---|
 | **Communication style** | terse · balanced · thorough |
+| **Simple talk** (plainness) | off · plain · caveman — off = normal; plain = plain words, no jargon; caveman = terse caveman phrasing. Orthogonal to communication style (length); injected each turn by `simple-talk.sh` (ADR-032). |
 | **Model effort** | minimal · fast · balanced · thorough · max |
 | **Explanation verbosity** | minimal · normal · teaching |
 | **Orchestration mode** | main-thread · hybrid · agent-teams · dynamic-workflows |
@@ -51,6 +52,7 @@ Shape (stamp `source:"session"` and an ISO `set_at`):
   "orchestration_mode": "...",
   "cost_alert_sensitivity": "...",
   "passive_suggest": true,
+  "simple_talk": "off",
   "source": "session",
   "set_at": "<iso8601>"
 }

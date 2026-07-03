@@ -31,7 +31,7 @@ CWD="$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)"
 [ -z "$CWD" ] && CWD="$PWD"
 
 # Built-in baseline (matches the schema defaults).
-BUILTIN='{"communication_style":"balanced","model_effort":"balanced","explanation_verbosity":"normal","orchestration_mode":"main-thread","cost_alert_sensitivity":"normal","passive_suggest":true}'
+BUILTIN='{"communication_style":"balanced","model_effort":"balanced","explanation_verbosity":"normal","orchestration_mode":"main-thread","cost_alert_sensitivity":"normal","passive_suggest":true,"simple_talk":"off"}'
 
 # Global defaults layer.
 G='{}'
