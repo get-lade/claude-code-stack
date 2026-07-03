@@ -1,7 +1,7 @@
 {
   "tier": 3,
   "name": "Specialist Bench",
-  "description": "6 specialist subagents + domain modes. For complex multi-domain work. Adversarial roles (architecture-critic, red-team) run via the local Gemini CLI — see ADR-012.",
+  "description": "6 specialist subagents + domain modes. For complex multi-domain work. Adversarial roles (architecture-critic, red-team) reach the Gemini family via the REST API (`scripts/lib/gemini-api.sh`) — the CLI is retired; see ADR-027 and ADR-031.",
   "extends": "tier-2",
   "files": {
     "global": [
@@ -18,7 +18,6 @@
     ]
   },
   "requirements": [
-    { "type": "command", "name": "gemini" },
     { "type": "command", "name": "codex", "advisory": true }
   ],
   "smoke_tests": [
@@ -28,14 +27,14 @@
     "test -f ~/.claude/agents/incident-commander.md",
     "test -f ~/.claude/agents/architecture-critic.md",
     "test -f ~/.claude/agents/accessibility-auditor.md",
-    "test -f ~/.claude/config/domain-modes.json",
-    "command -v gemini"
+    "test -f ~/.claude/config/domain-modes.json"
   ],
   "advisory_smoke_tests": [
+    "[ -n \"${GEMINI_API_KEY:-}\" ] || security find-generic-password -s gemini-api-key -w",
     "command -v codex"
   ],
   "notes": {
-    "gemini_requirement": "Artifact 4's tier-3 manifest required Keychain item `google-ai-api-key` and `openai-api-key-gpt5`. Per ADR-011 (Codex) and ADR-012 (Gemini), OpenAI- and Gemini-family work routes through the local CLIs instead — requirements are `command: codex` and `command: gemini`.",
+    "gemini_requirement": "Gemini-family work routes through the REST API, NOT a CLI: ADR-027 retired the Gemini CLI (IneligibleTierError — the CLI is dead) and moved these roles to `scripts/lib/gemini-api.sh`, keyed on `GEMINI_API_KEY` (env) or macOS Keychain `gemini-api-key`. Per ADR-031 the Gemini dependency is a soft key check in `advisory_smoke_tests` ([ -n $GEMINI_API_KEY ] || Keychain `gemini-api-key`), NOT a hard `command: gemini` requirement (that binary can no longer authenticate). It is not a hard `requirements[]` entry: ADR-030's advisory-requirement mechanism is command-only, and a hard `keychain_item` would abort a fresh install — the advisory smoke test (run by verify.sh at install step 5) carries the warning instead.",
     "domain_modes_path": "domain-modes.json installs to ~/.claude/config/domain-modes.json (the /domain-mode skill reads it from there). Artifact 4's manifest said ~/.claude/domain-modes.json — corrected for consistency with the skill and the other config files.",
     "prompt_caching": "config/prompt-caching.json is installed at Tier 2 (tier-3 extends tier-2); not re-listed here."
   }
