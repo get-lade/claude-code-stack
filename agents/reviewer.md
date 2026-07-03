@@ -7,7 +7,7 @@ forbidden_invokes:
   - implementer
   - architect
 context_caching: false
-description: Adversarial cold-read of the diff before merge. The adversarial pass runs through Codex (OpenAI GPT-5.5 family) via the local Codex CLI — a different model family than the implementer (Claude) — to catch what same-family review would miss. This subagent orchestrates the Codex review and relays its findings. See ADR-011.
+description: Adversarial cold-read of the diff before merge. The adversarial pass runs through the OpenAI GPT-5.5 family — reached via the OpenAI API by default, or the Codex CLI when codex_transport=cli (ADR-030) — a different model family than the implementer (Claude), to catch what same-family review would miss. This subagent orchestrates that review and relays its findings. See ADR-011.
 ---
 
 # Reviewer
@@ -28,6 +28,7 @@ instead of five minutes into `codex exec`:
 # shell if OPENAI_API_KEY isn't already set — so the Codex direct-API rung works
 # even if the Codex CLI auth is gone. Cloud env always wins (no-op when set).
 source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-key.sh" 2>/dev/null && oai_export || true
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-review.sh" 2>/dev/null || true  # oair_call (ADR-030)
 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/cross-family-preflight.sh"
 # or, if running from the stack repo: bash scripts/lib/cross-family-preflight.sh
 ```
@@ -101,15 +102,15 @@ dsr_run reviewer    # ROUTINE only; the helper itself BLOCKS (returns 8) any hig
 1. Identify the diff: `git diff <base>..<head>` (base = merge target, head = current branch).
 2. Run the adversarial review on the **routed** engine/model from Step 0.5, scoped to the diff:
    - **routine / local:** `ollama run "$RR_MODEL"` with the review prompt below (diff piped in).
-   - **high or escalation / Codex:** `codex exec -m "$RR_MODEL" -c model_reasoning_effort="$RR_EFFORT" "<review prompt>"`. (`codex exec review` is the whole-repo shortcut — prefer the scoped prompt form so the review stays diff-bounded.)
+   - **high or escalation / OpenAI family:** pipe the diff into `oair_call`: `git diff <base>..<head> | oair_call "<review prompt>" "$RR_MODEL" "$RR_EFFORT"`. The helper (ADR-030) reaches GPT-5.5 via the OpenAI API by default, or `codex exec` when `codex_transport=cli` (with automatic API fallback). Keep it diff-scoped — never a whole-repo cold read.
    - Review prompt (both engines): `"Adversarially review the diff <base>..<head>. Read the code cold — you do NOT have the architect's plan or implementer's commentary. Check: correctness, edge cases (empty/null/boundary/malformed), security (injection, auth bypass, secret leakage, RLS holes), error handling, performance (N+1, unbounded loops, missing indexes), style, dependencies. Output findings as BLOCKING / NON-BLOCKING / NIT with file:line."`
-3. Capture the routed engine's output verbatim (Qwen for routine, Codex for high/escalation).
+3. Capture the routed engine's output verbatim (Qwen for routine, the OpenAI family via `oair_call` for high/escalation).
 4. Structure it into the handoff format below. Do not soften, drop, or override Codex's findings.
-5. **If Step 0 returned `READY` but `codex` isn't on PATH — walk this ladder.** The requirement (ADR-011, ADR-015) is review by a **non-Claude model family** — the *model*, not the *binary*:
-   - **CLI on PATH** (`command -v codex`) → use it as in step 2.
-   - **Else if `printenv OPENAI_API_KEY` is set and the API is reachable** (Step 0 said `READY`) → reach GPT-5.5 another way (your choice — both satisfy ADR-011): `npm i -g @openai/codex` then run `codex exec` as above, **or** call the OpenAI API directly over HTTP with that key, feeding it the same review prompt.
+5. **Transport is handled by `oair_call`, not by you (ADR-030).** The requirement (ADR-011, ADR-015) is review by a **non-Claude model family** — the *model*, not the *binary*. `oair_call` resolves `codex_transport` itself:
+   - **`api` (default)** → calls the OpenAI API directly with `OPENAI_API_KEY` (env or Keychain `openai-api-key`). The codex CLI is never invoked.
+   - **`cli` (opt-in)** → runs `codex exec`; on any failure (missing, quarantine-blocked, not-authenticated) it **falls back to the API automatically**.
 
-   In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv OPENAI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
+   So you never branch on "is codex on PATH" — a blocked or absent CLI can no longer strand the review. In cloud sessions the key is an environment variable; locally it can be the Keychain backup (ADR-028). See ADR-030.
 
 ## Graceful degradation (ADR-022 — when Step 0 was NOT `READY`)
 

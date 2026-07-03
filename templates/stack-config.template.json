@@ -1,6 +1,6 @@
 {
   "$schema": "https://github.com/bschonbrun/claude-code-stack/schemas/stack-config-schema.json",
-  "stack_version": "1.1.4",
+  "stack_version": "1.1.5",
   "stack_tier": 2,
   "purpose": "<one-line description>",
   "created": "YYYY-MM-DD",
@@ -16,6 +16,7 @@
   "required_approvals": [],
   "model_overrides": {},
   "skill_overrides": {},
+  "review": { "codex_transport": "api" },
   "cost_protection": {
     "per_session_alert_usd": 5.00,
     "per_day_alert_usd": 50.00,

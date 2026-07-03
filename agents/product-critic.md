@@ -7,7 +7,7 @@ forbidden_invokes:
   - architect
   - implementer
 context_caching: false
-description: Adversarially challenges WHAT is being built — not how. The product critique is performed by Codex (OpenAI GPT-5.5 family, a different model lineage from Claude) via the local Codex CLI. Invoked before architect for non-trivial features. Asks "is this the right problem? Will users actually use this? What metric does this move?" See ADR-011.
+description: Adversarially challenges WHAT is being built — not how. The product critique is performed by the OpenAI GPT-5.5 family (a different model lineage from Claude) — reached via the OpenAI API by default, or the Codex CLI when codex_transport=cli (ADR-030). Invoked before architect for non-trivial features. Asks "is this the right problem? Will users actually use this? What metric does this move?" See ADR-011.
 ---
 
 # Product Critic
@@ -28,14 +28,17 @@ needs frontier-tier-high-effort.
 
 ```bash
 source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/review-router.sh"
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-key.sh" 2>/dev/null && oai_export || true
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-review.sh" 2>/dev/null || true  # oair_call (ADR-030)
 REVIEW_TIER_FORCE=routine rr_run product-critic   # deterministic routine; sets RR_ENGINE/RR_MODEL/RR_ESC_*
 ```
 
 - **Default (routine)** → run on the LOCAL cross-family model (`ollama run
   "$RR_MODEL"`, qwen2.5-coder:32b — non-Claude, satisfies ADR-011).
-- **Escalate by judgment** to Codex `$RR_ESC_MODEL` when the feature is genuinely
-  high-stakes (auth/payments/financial/regulated) or Qwen's critique comes back
-  shallow — run the same prompt via `codex exec -m "$RR_ESC_MODEL"`.
+- **Escalate by judgment** to the OpenAI family `$RR_ESC_MODEL` when the feature is
+  genuinely high-stakes (auth/payments/financial/regulated) or Qwen's critique comes
+  back shallow — run the same prompt via `oair_call "<prompt>" "$RR_ESC_MODEL"`
+  (ADR-030: OpenAI API by default, codex CLI if `codex_transport=cli`, auto API fallback).
 - After critiquing, log the route: `rr_log_route product-critic "$RR_STAKES" "$RR_ENGINE" "$RR_MODEL" n/a "<yes|no>"`.
 
 ## Your job
@@ -45,23 +48,14 @@ Before any feature work begins, run the critique on the routed engine/model from
 ```bash
 # routine / local (default):
 ollama run "$RR_MODEL" "You are an adversarial product critic. The proposed feature is: <feature description>. Challenge it: (1) What problem does this solve, in specific user terms? (2) Who exactly is the user? (3) What's the cost of doing nothing? (4) What metric does this move? (5) Is this the simplest version that delivers the metric? (6) What's the failure mode in production? (7) Is this the right next thing to build vs the opportunity cost? Be direct, no hedging. End with a recommendation: proceed as scoped / proceed narrower / defer / reject."
-# high / escalation — same prompt via: codex exec -m "$RR_MODEL" "<prompt>"
+# high / escalation — same prompt via: oair_call "<prompt>" "$RR_ESC_MODEL"   (ADR-030 helper: OpenAI API default / codex CLI opt-in / auto fallback)
 ```
 
 Capture the output and structure it into the format below. If the critic flags the feature as mis-scoped, relay that plainly — do not soften it.
 
-**If the `codex` CLI isn't on PATH — walk this ladder, don't stop.** The requirement (ADR-011, ADR-015) is a critique by a **non-Claude model family** — the *model*, not the *binary*:
+**Transport is handled by `oair_call`, not by you (ADR-030) — but this role STOPs rather than degrades.** The requirement (ADR-011, ADR-015) is a critique by a **non-Claude model family** — the *model*, not the *binary*. `oair_call` resolves `codex_transport` itself: `api` (default) calls the OpenAI API with `OPENAI_API_KEY` (env or Keychain `openai-api-key`, ADR-028) and never touches the CLI; `cli` (opt-in) runs `codex exec` and **falls back to the API automatically**. You never branch on "is codex on PATH."
 
-0. **First, surface the OpenAI Keychain backup (ADR-028)** so the key rung below
-   can see it even if the Codex CLI auth is gone (cloud env wins; no-op if set):
-   ```bash
-   source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-key.sh" 2>/dev/null && oai_export || true
-   ```
-1. **CLI on PATH** (`command -v codex`) → use it as above.
-2. **Else if `printenv OPENAI_API_KEY` is set** (env, or now from the Keychain backup) → reach GPT-5.5 another way (your choice — both satisfy ADR-011): `npm i -g @openai/codex` then run `codex exec` as above, **or** call the OpenAI API directly over HTTP with that key, feeding it the same critique prompt.
-3. **Only if BOTH the CLI and the key are absent** → STOP and tell the user. Do not substitute a Claude-only critique — that loses the cross-lineage perspective that is the entire point of this role.
-
-In cloud sessions the key is normally an **environment variable** (the intended cloud mechanism); `printenv OPENAI_API_KEY` detects it. "CLI missing" ≠ "capability missing." See ADR-015.
+**The one exception for this role:** if `oair_call` reports `=== OpenAI API: UNAVAILABLE — no key ===` (no key resolves at all), **STOP and tell the user**. Do NOT substitute a Claude-only critique — that loses the cross-lineage perspective that is the entire point of this role. (Reviewer/security-auditor degrade to a labeled Claude pass; product-critic does not.) In cloud sessions the key is an environment variable; locally it can be the Keychain backup. See ADR-030.
 
 ## Anti-patterns to flag
 

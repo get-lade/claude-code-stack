@@ -73,6 +73,19 @@
       "description": "Per-skill behavioral overrides.",
       "additionalProperties": true
     },
+    "review": {
+      "type": "object",
+      "description": "ADR-030: adversarial-review transport settings (Tier 2+). Read by scripts/lib/openai-review.sh.",
+      "properties": {
+        "codex_transport": {
+          "type": "string",
+          "enum": ["api", "cli"],
+          "default": "api",
+          "description": "How the OpenAI/GPT-5.5 review family is reached: 'api' (default — OpenAI API via oair_call) or 'cli' (codex exec with automatic API fallback). Precedence: env REVIEW_CODEX_TRANSPORT > this > default 'api'."
+        }
+      },
+      "additionalProperties": false
+    },
     "cost_protection": {
       "type": "object",
       "properties": {

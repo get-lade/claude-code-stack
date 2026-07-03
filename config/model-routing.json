@@ -122,6 +122,7 @@
   },
   "review_tiers": {
     "_doc": "ADR-025 adversarial-review router tiers. Read by scripts/lib/review-router.sh (env var > this block > built-in default). Repoint models here when the Tier-5 local box lands — no script edit. Every tier MUST be a non-Claude family (ADR-011 cross-family rule); never set a Claude model here.",
+    "_doc_codex_transport": "ADR-030: HOW the OpenAI/GPT-5.5 family is reached is a separate setting `codex_transport` (api|cli), NOT configured here. Default 'api' (scripts/lib/openai-review.sh, oair_call → OpenAI API); 'cli' uses `codex exec` with automatic API fallback. Resolution (highest first): env REVIEW_CODEX_TRANSPORT > project .claude/stack-config.json .review.codex_transport > default 'api'. Set per-project via /project-init, per-session via /session.",
     "high": {
       "engine": "codex",
       "model": "gpt-5.5",

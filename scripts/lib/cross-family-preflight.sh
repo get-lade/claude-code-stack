@@ -45,7 +45,34 @@ CFP_PROBE_TIMEOUT="${CFP_PROBE_TIMEOUT:-6}"
 
 # --- individual checks (each prints a yes/no token, no side effects) ----------
 
-cfp_have_cli() { command -v codex >/dev/null 2>&1 && echo yes || echo no; }
+# Portable bounded run (macOS lacks coreutils `timeout`): SIGALRM via perl+exec.
+# A quarantined codex can HANG (no output, no exit — observed on the box that
+# motivated ADR-030), so the probe must be time-bounded or it stalls the whole
+# preflight. Falls back to a direct run only if perl is unavailable.
+_cfp_timeout() {
+  local s="$1"; shift
+  if command -v perl >/dev/null 2>&1; then
+    perl -e 'my $s=shift @ARGV; alarm $s; exec @ARGV; exit 127' "$s" "$@" 2>/dev/null
+    return $?
+  fi
+  # No perl: bash watchdog so a hung `codex --version` can't stall the probe
+  # (do NOT fall through to an unbounded run — that re-opens the ADR-030 hang).
+  "$@" & local p=$!
+  ( sleep "$s"; kill -9 "$p" 2>/dev/null ) & local w=$!
+  wait "$p" 2>/dev/null; local rc=$?
+  kill "$w" 2>/dev/null; wait "$w" 2>/dev/null
+  return "$rc"
+}
+
+# Runnable, not merely present (ADR-030), AND time-bounded: `codex --version`
+# actually invokes the binary, so a quarantined/malware-blocked codex (present on
+# PATH but killed or HUNG at exec) reports `no` within the timeout. `command -v
+# codex` alone masked exactly that failure — the bug ADR-030 fixes and ADR-022
+# intended to catch. Only called in cli mode (see cfp_run) — never in api mode.
+cfp_have_cli() {
+  command -v codex >/dev/null 2>&1 || { echo no; return; }
+  if _cfp_timeout "${CFP_CLI_PROBE_TIMEOUT:-8}" codex --version >/dev/null 2>&1; then echo yes; else echo no; fi
+}
 
 cfp_have_key() {
   # The key must reach THIS (the subagent's) shell — printenv, not a settings
@@ -83,14 +110,40 @@ cfp_run() {
   [[ -f "$_oai_lib" ]] || _oai_lib="$(dirname "${BASH_SOURCE[0]}")/openai-key.sh"
   # shellcheck source=/dev/null
   [[ -f "$_oai_lib" ]] && { source "$_oai_lib"; oai_export 2>/dev/null || true; }
-  cli="$(cfp_have_cli)"
+
+  # Transport (ADR-030): resolve via the review helper so preflight and the agent
+  # agree. api → a runnable CLI does NOT count as a usable path (READY hinges on
+  # key + reachable API); cli → the CLI counts (ADR-022 behavior), API is fallback.
+  local _oair_lib="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/scripts/lib/openai-review.sh"
+  [[ -f "$_oair_lib" ]] || _oair_lib="$(dirname "${BASH_SOURCE[0]}")/openai-review.sh"
+  # shellcheck source=/dev/null
+  local transport="api"
+  [[ -f "$_oair_lib" ]] && { source "$_oair_lib"; transport="$(oair_transport)"; }
+
+  # Only probe the CLI when it can affect the verdict (cli mode). In api mode the
+  # CLI is irrelevant AND a quarantined binary can HANG `codex --version` — so we
+  # must NOT probe it (that would stall preflight even when the API path is fine).
+  if [[ "$transport" == "cli" ]]; then cli="$(cfp_have_cli)"; else cli="n/a (api — not probed)"; fi
   key="$(cfp_have_key)"
 
-  if [[ "$cli" == "no" && "$key" == "no" ]]; then
-    # No credential of any kind reaches this shell. Reachability is moot.
+  # A usable credential path is transport-dependent (ADR-030). api: key only —
+  # CLI presence is no longer evidence of capability (the malware-block lesson).
+  # cli: a runnable CLI OR a key. If neither → BLOCKED_NOCREDS.
+  local usable="no"
+  if [[ "$transport" == "api" ]]; then
+    [[ "$key" == "yes" ]] && usable="yes"
+  else
+    { [[ "$cli" == "yes" || "$key" == "yes" ]]; } && usable="yes"
+  fi
+
+  if [[ "$usable" == "no" ]]; then
     verdict="BLOCKED_NOCREDS"
     reach="n/a"
-    fix="Set OPENAI_API_KEY in the cloud ENVIRONMENT's variables (it must reach the subagent shell — printenv, not settings.local.json). See docs/runbooks/cross-family-review-cloud.md."
+    if [[ "$transport" == "api" ]]; then
+      fix="Set OPENAI_API_KEY in the ENVIRONMENT (printenv, not settings.local.json) or the Keychain 'openai-api-key' (ADR-028). Transport is 'api' (ADR-030) — the codex CLI is not used. See docs/runbooks/cross-family-review-cloud.md."
+    else
+      fix="No RUNNABLE codex CLI and no OPENAI_API_KEY reach this shell. Set the key (env or Keychain 'openai-api-key'), or set codex_transport=api. See docs/runbooks/cross-family-review-cloud.md."
+    fi
   else
     reach="$(cfp_api_reachable)"
     if [[ "$reach" == "yes" ]]; then
@@ -108,13 +161,14 @@ cfp_run() {
   CFP_VERDICT="$verdict"
 
   cat <<EOF
-=== cross-family preflight (ADR-022) ===
-codex CLI on PATH : $cli
-OPENAI_API_KEY    : $key   (in THIS shell's env)
+=== cross-family preflight (ADR-022 / ADR-030) ===
+codex_transport   : $transport
+codex CLI runnable: $cli
+OPENAI_API_KEY    : $key   (env or Keychain, THIS shell)
 api.openai.com    : $reach
 VERDICT           : $verdict
 FIX               : $fix
-========================================
+==================================================
 EOF
 
   [[ "$verdict" == "READY" ]]

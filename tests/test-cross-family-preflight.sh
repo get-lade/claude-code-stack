@@ -27,8 +27,11 @@ LOG="$HOME/.claude/logs/subagent-runs.jsonl"
 run_verdict() {
   # Use distinct names — cfp_run declares `local cli/key/reach`, which would
   # shadow same-named stub vars under bash dynamic scoping.
-  local t_cli="$1" t_key="$2" t_reach="$3"
+  # Arg 4 (transport, default api) pins REVIEW_CODEX_TRANSPORT so cfp_run resolves
+  # deterministically without reading a project stack-config (ADR-030).
+  local t_cli="$1" t_key="$2" t_reach="$3" t_transport="${4:-api}"
   (
+    export REVIEW_CODEX_TRANSPORT="$t_transport"
     # shellcheck disable=SC1090
     source "$LIB"
     cfp_have_cli() { echo "$t_cli"; }
@@ -39,29 +42,49 @@ run_verdict() {
   )
 }
 
-# 1. CLI present + reachable => READY
-[[ "$(run_verdict yes no yes)" == "READY" ]] \
-  && pass "CLI + reachable => READY" || fail "CLI + reachable => READY"
+# --- api mode (default, ADR-030): a runnable CLI does NOT count — key + API only ---
 
-# 2. Key present + reachable => READY
-[[ "$(run_verdict no yes yes)" == "READY" ]] \
-  && pass "key + reachable => READY" || fail "key + reachable => READY"
+# 1. api: CLI runnable but NO key => BLOCKED_NOCREDS  (THE malware-block regression guard)
+[[ "$(run_verdict yes no yes api)" == "BLOCKED_NOCREDS" ]] \
+  && pass "api: CLI-only (no key) => BLOCKED_NOCREDS" || fail "api: CLI-only (no key) => BLOCKED_NOCREDS"
 
-# 3. Key present but NOT reachable => BLOCKED_NETWORK (failure mode 2)
-[[ "$(run_verdict no yes no)" == "BLOCKED_NETWORK" ]] \
-  && pass "key + blocked => BLOCKED_NETWORK" || fail "key + blocked => BLOCKED_NETWORK"
+# 2. api: key present + reachable => READY
+[[ "$(run_verdict no yes yes api)" == "READY" ]] \
+  && pass "api: key + reachable => READY" || fail "api: key + reachable => READY"
 
-# 4. CLI present but NOT reachable => BLOCKED_NETWORK (codex also hits the API)
-[[ "$(run_verdict yes no no)" == "BLOCKED_NETWORK" ]] \
-  && pass "CLI + blocked => BLOCKED_NETWORK" || fail "CLI + blocked => BLOCKED_NETWORK"
+# 3. api: key present but NOT reachable => BLOCKED_NETWORK
+[[ "$(run_verdict no yes no api)" == "BLOCKED_NETWORK" ]] \
+  && pass "api: key + blocked => BLOCKED_NETWORK" || fail "api: key + blocked => BLOCKED_NETWORK"
 
-# 5. Neither CLI nor key => BLOCKED_NOCREDS (failure mode 1), reachability moot
-[[ "$(run_verdict no no no)" == "BLOCKED_NOCREDS" ]] \
-  && pass "no creds => BLOCKED_NOCREDS" || fail "no creds => BLOCKED_NOCREDS"
+# 4. api: CLI runnable, no key, unreachable => BLOCKED_NOCREDS (key is the only path)
+[[ "$(run_verdict yes no no api)" == "BLOCKED_NOCREDS" ]] \
+  && pass "api: CLI-only unreachable => BLOCKED_NOCREDS" || fail "api: CLI-only unreachable => BLOCKED_NOCREDS"
 
-# 6. Probe could not run (no curl) but creds exist => PROBE_SKIPPED
-[[ "$(run_verdict no yes unknown)" == "PROBE_SKIPPED" ]] \
-  && pass "unknown reach => PROBE_SKIPPED" || fail "unknown reach => PROBE_SKIPPED"
+# 5. api: neither CLI nor key => BLOCKED_NOCREDS
+[[ "$(run_verdict no no no api)" == "BLOCKED_NOCREDS" ]] \
+  && pass "api: no creds => BLOCKED_NOCREDS" || fail "api: no creds => BLOCKED_NOCREDS"
+
+# 6. api: key present, probe unknown (no curl) => PROBE_SKIPPED
+[[ "$(run_verdict no yes unknown api)" == "PROBE_SKIPPED" ]] \
+  && pass "api: unknown reach => PROBE_SKIPPED" || fail "api: unknown reach => PROBE_SKIPPED"
+
+# --- cli mode: a runnable CLI counts (ADR-022 behavior preserved) ---
+
+# 6a. cli: runnable CLI, no key, reachable => READY
+[[ "$(run_verdict yes no yes cli)" == "READY" ]] \
+  && pass "cli: runnable CLI + reachable => READY" || fail "cli: runnable CLI + reachable => READY"
+
+# 6b. cli: key fallback (no runnable CLI), reachable => READY
+[[ "$(run_verdict no yes yes cli)" == "READY" ]] \
+  && pass "cli: key fallback => READY" || fail "cli: key fallback => READY"
+
+# 6c. cli: neither runnable CLI nor key => BLOCKED_NOCREDS
+[[ "$(run_verdict no no no cli)" == "BLOCKED_NOCREDS" ]] \
+  && pass "cli: no creds => BLOCKED_NOCREDS" || fail "cli: no creds => BLOCKED_NOCREDS"
+
+# 6d. default (transport unset) behaves as api => CLI-only, no key => BLOCKED_NOCREDS
+[[ "$(run_verdict yes no yes)" == "BLOCKED_NOCREDS" ]] \
+  && pass "default transport = api (CLI-only => BLOCKED_NOCREDS)" || fail "default transport = api"
 
 # 7. cfp_have_key reads the real env (empty => no, set => yes)
 ( source "$LIB"; OPENAI_API_KEY=""; [[ "$(cfp_have_key)" == "no" ]] ) \
@@ -81,16 +104,17 @@ else
   fail "deviation row logged"
 fi
 
-# 9. Verdict block is human-readable (contains VERDICT + FIX lines)
+# 9. Verdict block is human-readable (VERDICT + FIX + transport line, ADR-030)
 out="$(
+  export REVIEW_CODEX_TRANSPORT=api
   source "$LIB"
   cfp_have_cli() { echo no; }
   cfp_have_key() { echo yes; }
   cfp_api_reachable() { echo no; }
   cfp_run
 )"
-grep -q "VERDICT" <<<"$out" && grep -q "FIX" <<<"$out" \
-  && pass "verdict block formatted" || fail "verdict block formatted"
+grep -q "VERDICT" <<<"$out" && grep -q "FIX" <<<"$out" && grep -q "codex_transport" <<<"$out" \
+  && pass "verdict block formatted (+transport line)" || fail "verdict block formatted (+transport line)"
 
 echo
 echo "cross-family-preflight: $PASS passed, $FAIL failed"

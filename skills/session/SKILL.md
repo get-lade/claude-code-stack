@@ -20,7 +20,7 @@ Set per-session preferences. Session-scoped by default; persistence is opt-in.
 ### 2. Ask (multiple-choice menu)
 
 Use the `AskUserQuestion` tool. One question per preference; put the current/last
-value first (marked "(current)"). Keep it to these six:
+value first (marked "(current)"). Keep it to these:
 
 | Pref | Options |
 |---|---|
@@ -31,6 +31,7 @@ value first (marked "(current)"). Keep it to these six:
 | **Cost-alert sensitivity** | relaxed · normal · strict |
 | **Governed loops** | off · checkpoint · bounded-checkpoint · bounded-autonomous (clamped to tier ceiling) |
 | **Passive capability suggestions** | on (default) · off — controls whether the dispatch nudge appends a pointer to the recommend-capabilities engine; the routing nudge itself always shows |
+| **Codex review transport** (Tier 2+) | api (default) · cli — `api` reaches the OpenAI/GPT-5.5 adversarial-review family via the OpenAI API; `cli` uses the codex CLI with automatic API fallback (ADR-030). Only offer this row at Tier ≥ 2. |
 
 Style → brevity budget (what the user is really choosing): terse ≈ 70 words /
 4 sentences, balanced ≈ 120 / 6, thorough ≈ 320 / 16. Mention this inline.
@@ -60,6 +61,15 @@ off → `false`** (unquoted — the hook compares the literal `false`; a quoted
 `mkdir -p ~/.claude/session-state` first. This takes effect immediately:
 `brevity-drift.sh` reads `communication_style` on the next turn, and you (the
 assistant) honor effort/verbosity/orchestration directly for the session.
+
+**Codex review transport (ADR-030).** If the user changed it from the default,
+also `export REVIEW_CODEX_TRANSPORT=<api|cli>` — that env var is the session-layer
+override the review helper (`scripts/lib/openai-review.sh`, `oair_transport`)
+reads first. Because a Bash-tool `export` does not persist across dispatched
+subagent shells, for a **durable** per-project choice tell the user to run
+`/project-init` (writes `review.codex_transport` to `.claude/stack-config.json`,
+which the helper reads next). Do NOT write `codex_transport` into
+`current-prefs.json` — the helper does not read that file.
 
 **Governed loops (ADR-023):** the loop choice sets `loop_policy.default_autonomy`
 (via `/stack-config`; `off` ⇒ checkpoint floor) and always writes
