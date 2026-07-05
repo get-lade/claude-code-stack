@@ -73,7 +73,8 @@
         "orchestration_mode": { "type": "string", "enum": ["main-thread", "agent-teams", "hybrid", "dynamic-workflows"] },
         "cost_alert_sensitivity": { "type": "string", "enum": ["relaxed", "normal", "strict"], "default": "normal" },
         "passive_suggest": { "type": "boolean", "default": true, "description": "When true, dispatch-nudge.sh appends a pointer to the recommend-capabilities engine." },
-        "simple_talk": { "type": "string", "enum": ["off", "plain", "caveman"], "default": "off", "description": "v1.3 (ADR-032): plainness modifier (off/plain/caveman), orthogonal to communication_style. Injected each turn by hooks/simple-talk.sh." }
+        "simple_talk": { "type": "string", "enum": ["off", "plain", "caveman"], "default": "off", "description": "v1.3 (ADR-032): plainness modifier (off/plain/caveman), orthogonal to communication_style. Injected each turn by hooks/simple-talk.sh." },
+        "model_fit_receipt": { "type": "string", "enum": ["off", "on"], "default": "on", "description": "v1.3 (ADR-033): post-session model-fit receipt (off/on). on = print one retrospective end-of-session line; off = no receipt, no accrual." }
       },
       "additionalProperties": false
     }

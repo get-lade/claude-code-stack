@@ -32,6 +32,7 @@ value first (marked "(current)"). Keep it to these:
 | **Cost-alert sensitivity** | relaxed · normal · strict |
 | **Governed loops** | off · checkpoint · bounded-checkpoint · bounded-autonomous (clamped to tier ceiling) |
 | **Passive capability suggestions** | on (default) · off — controls whether the dispatch nudge appends a pointer to the recommend-capabilities engine; the routing nudge itself always shows |
+| **Model-fit receipt** | off · on (default) — at session end, print one retrospective line naming actual cost/model, the session's workload shape (mechanical/mixed/reasoning-heavy), and a cheaper/stronger alternative if the signal is clear. Surfaced by `/handoff` and, once per session, by `hooks/model-fit-turn.sh` (ADR-033). |
 | **Codex review transport** (Tier 2+) | api (default) · cli — `api` reaches the OpenAI/GPT-5.5 adversarial-review family via the OpenAI API; `cli` uses the codex CLI with automatic API fallback (ADR-030). Only offer this row at Tier ≥ 2. |
 
 Style → brevity budget (what the user is really choosing): terse ≈ 70 words /
@@ -53,6 +54,7 @@ Shape (stamp `source:"session"` and an ISO `set_at`):
   "cost_alert_sensitivity": "...",
   "passive_suggest": true,
   "simple_talk": "off",
+  "model_fit_receipt": "on",
   "source": "session",
   "set_at": "<iso8601>"
 }

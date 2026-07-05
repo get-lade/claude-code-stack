@@ -358,6 +358,197 @@ loop_cost_from_usage() {
   ' 2>/dev/null || echo 0
 }
 
+# Resolve the model-routing.json price table path (same precedence as
+# loop_cost_from_usage: explicit override, then installed, then repo-relative).
+# Prints the path, or empty if not found. Fail-safe.
+_model_fit_price_table() {
+  local pt="${LOOP_PRICE_TABLE:-}"
+  if [[ -z "$pt" ]]; then
+    if [[ -f "${_loop_home}/.claude/config/model-routing.json" ]]; then
+      pt="${_loop_home}/.claude/config/model-routing.json"
+    else
+      # bash 3.2 (macOS default): BASH_SOURCE can be an empty array at this
+      # call depth, and `${BASH_SOURCE[0]}` alone then trips `set -u` as an
+      # unbound-parameter error. The `:-` default guards that.
+      local _here; _here="$(cd "$(dirname "${BASH_SOURCE[0]:-}")" 2>/dev/null && pwd)"
+      [[ -f "${_here}/../../config/model-routing.json" ]] && pt="${_here}/../../config/model-routing.json"
+    fi
+  fi
+  [[ -n "$pt" && -f "$pt" ]] && printf '%s' "$pt"
+  return 0
+}
+
+# ADR-033: post-session model-fit receipt. Shared ratio + cost calculator,
+# called by both /handoff (Step: model-fit receipt) and the Stop-hook fallback
+# (hooks/model-fit-turn.sh's companion read, at session end).
+#
+# Sums ONLY subagent-runs.jsonl rows with event=="main_turn" AND agent=="main"
+# (the two structural tags that exclude all subagent/loop-cost rows — ADR-033
+# blocker 3), scoped to this session's session_start + project. Computes
+# gen_per_edit = total_out_tokens / max(edit_calls, 1) and walks the three
+# bands (mechanical / mixed / reasoning) with a minimum-evidence gate and a
+# tier-ladder clamp (never below Haiku, never above Opus).
+#
+# Usage: model_fit_receipt_line <session_start_iso> <project_path> [log_path]
+# Prints one receipt line, or empty (insufficient evidence / no data / error).
+# Fail-safe: any error -> empty, never crashes the caller.
+model_fit_receipt_line() {
+  local session_start="${1:-}" project="${2:-}" log="${3:-${_loop_home}/.claude/logs/subagent-runs.jsonl}"
+  [[ -f "$log" ]] || { echo ""; return 0; }
+  # An unresolved session_start must never silently widen the scope to
+  # "all main_turn rows ever for this project" — that would print a receipt
+  # that claims "this session" over an unbounded history. Stay silent instead;
+  # callers should skip invoking this at all when they can't resolve their own
+  # session_start (see hooks/model-fit-turn.sh), but this is the load-bearing
+  # guard in case a future caller passes empty by mistake.
+  [[ -z "$session_start" ]] && { echo ""; return 0; }
+
+  local pt; pt="$(_model_fit_price_table)"
+  [[ -z "$pt" ]] && { echo ""; return 0; }
+
+  # Aggregate this session's main_turn rows into one JSON object.
+  local agg
+  agg="$(jq -rs --arg s "$session_start" --arg p "$project" '
+    [ .[]
+      | select(.event == "main_turn")
+      | select(.agent == "main")
+      | select( ($s == "") or ((.session_start // "") == $s) )
+      | select( ($p == "") or ((.project // "") == $p) )
+    ] as $rows
+    | {
+        total_turns:      ($rows | length),
+        edit_calls:       ([ $rows[] | ((.tool_counts.edit // 0) + (.tool_counts.write // 0) + (.tool_counts.bash // 0)) ] | add // 0),
+        total_out_tokens: ([ $rows[] | (.out_tokens // 0) ] | add // 0),
+        total_in_tokens:  ([ $rows[] | (.in_tokens // 0) ] | add // 0),
+        model:            (($rows | map(select(.model != null and .model != "")) | last // {}).model // "claude-opus-4-8")
+      }
+  ' "$log" 2>/dev/null)" || { echo ""; return 0; }
+  [[ -z "$agg" ]] && { echo ""; return 0; }
+
+  local total_turns edit_calls total_out total_in model
+  total_turns="$(echo "$agg" | jq -r '.total_turns' 2>/dev/null)"
+  edit_calls="$(echo "$agg" | jq -r '.edit_calls' 2>/dev/null)"
+  total_out="$(echo "$agg" | jq -r '.total_out_tokens' 2>/dev/null)"
+  total_in="$(echo "$agg" | jq -r '.total_in_tokens' 2>/dev/null)"
+  model="$(echo "$agg" | jq -r '.model' 2>/dev/null)"
+  [[ "$total_turns" =~ ^[0-9]+$ ]] || total_turns=0
+  [[ "$edit_calls"  =~ ^[0-9]+$ ]] || edit_calls=0
+  [[ "$total_out"   =~ ^[0-9]+$ ]] || total_out=0
+  [[ "$total_in"    =~ ^[0-9]+$ ]] || total_in=0
+  # Read-site sanitization (belt-and-suspenders with the hook's write-site
+  # sanitization): model ids are always [A-Za-z0-9._-]. A row written before
+  # this fix, or from any other writer, could still carry an unsanitized
+  # string — strip anything else so it can never break out of the
+  # <system-reminder> wrapper this string is later printed inside.
+  model="$(printf '%s' "$model" | tr -cd 'A-Za-z0-9._-')"
+  [[ -z "$model" || "$model" == "null" ]] && model="claude-opus-4-8"
+
+  # No main_turn rows at all (e.g. all-subagent session) -> nothing to say.
+  [[ "$total_turns" -eq 0 ]] && { echo ""; return 0; }
+
+  # gen_per_edit = total_out_tokens / max(edit_calls, 1)
+  local denom="$edit_calls"
+  [[ "$denom" -lt 1 ]] && denom=1
+  local gen_per_edit
+  gen_per_edit="$(awk -v o="$total_out" -v d="$denom" 'BEGIN{printf "%.4f", o/d}' 2>/dev/null)" || gen_per_edit="0"
+
+  local cur_cost
+  cur_cost="$(loop_cost_from_usage "$total_in" "$total_out" "$model" 2>/dev/null || echo 0)"
+  [[ "$cur_cost" =~ ^[0-9]+(\.[0-9]+)?$ ]] || cur_cost=0
+
+  # Tier ladder walk (haiku -> sonnet -> opus).
+  local ladder idx alt_model shape=""
+  ladder="$(jq -r '.model_fit.tier_ladder[]?' "$pt" 2>/dev/null)"
+  [[ -z "$ladder" ]] && ladder=$'claude-haiku-4-5-20251001\nclaude-sonnet-4-6\nclaude-opus-4-8'
+  idx="$(printf '%s\n' "$ladder" | grep -nx "$model" | head -1 | cut -d: -f1)"
+  [[ -z "$idx" ]] && idx=3   # unknown current model -> treat as top of ladder (never suggest "up")
+  local ladder_len; ladder_len="$(printf '%s\n' "$ladder" | grep -c .)"
+
+  # Minimum-evidence gate: total_turns >= 6 AND edit_calls + (total_out/500) >= 12.
+  local mass
+  mass="$(awk -v e="$edit_calls" -v o="$total_out" 'BEGIN{printf "%.4f", e + (o/500)}' 2>/dev/null)" || mass="0"
+  local enough_evidence=1
+  [[ "$total_turns" -lt 6 ]] && enough_evidence=0
+  awk -v m="$mass" 'BEGIN{exit !(m < 12)}' 2>/dev/null && enough_evidence=0
+
+  local direction=""   # "cheaper" | "up" | "stay" | ""
+  if [[ "$enough_evidence" -eq 1 ]]; then
+    if awk -v g="$gen_per_edit" 'BEGIN{exit !(g < 300)}' 2>/dev/null && [[ "$edit_calls" -ge 10 ]]; then
+      shape="mostly mechanical editing (low prose-per-edit)"
+      direction="cheaper"
+    elif awk -v g="$gen_per_edit" 'BEGIN{exit !(g > 1200)}' 2>/dev/null; then
+      shape="generation/reasoning-heavy"
+      if [[ "$idx" -ge "$ladder_len" ]]; then
+        direction="stay"
+      else
+        direction="up"
+      fi
+    else
+      shape="mixed workload"
+      direction=""
+    fi
+  fi
+
+  # Resolve alt_model per direction, clamped to the ladder (never below Haiku,
+  # never above Opus). idx is 1-based line number in $ladder.
+  case "$direction" in
+    cheaper)
+      if [[ "$idx" -le 1 ]]; then
+        direction=""   # already at the floor -> no cheaper tier to suggest
+      else
+        alt_model="$(printf '%s\n' "$ladder" | sed -n "$((idx-1))p")"
+      fi
+      ;;
+    up)
+      alt_model="$(printf '%s\n' "$ladder" | sed -n "$((idx+1))p")"
+      ;;
+  esac
+
+  # alt_model comes from config/model-routing.json's tier_ladder, not the log,
+  # but sanitize anyway (defense in depth — same allowlist, cheap, and it is
+  # interpolated into the same reminder text as $model).
+  [[ -n "${alt_model:-}" ]] && alt_model="$(printf '%s' "$alt_model" | tr -cd 'A-Za-z0-9._-')"
+
+  local alt_cost=""
+  if [[ -n "${alt_model:-}" ]]; then
+    alt_cost="$(loop_cost_from_usage "$total_in" "$total_out" "$alt_model" 2>/dev/null || echo 0)"
+    [[ "$alt_cost" =~ ^[0-9]+(\.[0-9]+)?$ ]] || alt_cost=0
+  fi
+
+  local cur_fmt alt_fmt
+  cur_fmt="$(awk -v c="$cur_cost" 'BEGIN{printf "%.2f", c}' 2>/dev/null)" || cur_fmt="$cur_cost"
+
+  case "$direction" in
+    cheaper)
+      alt_fmt="$(awk -v c="$alt_cost" 'BEGIN{printf "%.2f", c}' 2>/dev/null)" || alt_fmt="$alt_cost"
+      printf 'Model-fit receipt — this session: ~$%s on %s across %s turns, %s. %s would'"'"'ve been ≈$%s. If sessions like this are common, consider defaulting to %s. (`model_fit_receipt: off` in `/session` to silence.)' \
+        "$cur_fmt" "$model" "$total_turns" "$shape" "$alt_model" "$alt_fmt" "$alt_model"
+      ;;
+    up)
+      alt_fmt="$(awk -v c="$alt_cost" 'BEGIN{printf "%.2f", c}' 2>/dev/null)" || alt_fmt="$alt_cost"
+      printf 'Model-fit receipt — this session: ~$%s on %s, %s. %s (≈$%s) may be a better fit if quality mattered here.' \
+        "$cur_fmt" "$model" "$shape" "$alt_model" "$alt_fmt"
+      ;;
+    stay)
+      printf 'Model-fit receipt — this session: ~$%s on %s, %s. Already on the strongest tier — staying is the right call.' \
+        "$cur_fmt" "$model" "$shape"
+      ;;
+    *)
+      if [[ "$enough_evidence" -eq 1 ]]; then
+        printf 'Model-fit receipt — this session: ~$%s on %s, %s. No clear cheaper/stronger fit. (`model_fit_receipt: off` in `/session` to silence.)' \
+          "$cur_fmt" "$model" "${shape:-mixed workload}"
+      else
+        # Below the minimum-evidence gate: print the cost line only, no shape
+        # and no recommendation (ADR-033 Signal section) — never fully silent
+        # here (that's reserved for the zero-main_turn-rows case above).
+        printf 'Model-fit receipt — this session: ~$%s on %s across %s turns. Not enough data yet for a workload read. (`model_fit_receipt: off` in `/session` to silence.)' \
+          "$cur_fmt" "$model" "$total_turns"
+      fi
+      ;;
+  esac
+  return 0
+}
+
 # Phase-3 (spec §6.7): durable corrections. When a loop exits without meeting its
 # goal (no_progress / escalated / a bound trip), append a structured note so the
 # lesson compounds — /handoff folds unresolved corrections into the next session.

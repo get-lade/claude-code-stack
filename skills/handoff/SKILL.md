@@ -37,6 +37,14 @@ Run at the end of a working session. Writes `.claude/next_prompt.md` (the "live"
   `jq -c 'select(.resolved != true)' ~/.claude/session-state/loop-corrections.jsonl 2>/dev/null`.
   Summarize each as `loop <loop_id> exited <status> — <hint>` under a **Loop corrections**
   bullet in *What's blocked & why* (or *Gotchas*). If none, omit.
+- **Model-fit receipt (ADR-033, skip if pref is `off` or the lib is missing):**
+  Read `session_prefs.model_fit_receipt` from `~/.claude/session-state/current-prefs.json`
+  (default `on`). If not `off` and `skills/loop-engineer/loop_lib.sh` exists, source it and call:
+  `model_fit_receipt_line "$SESSION_START" "$PROJECT" ~/.claude/logs/subagent-runs.jsonl`
+  (same `$SESSION_START`/`$PROJECT` as the team-utilization block above). Print
+  the returned line verbatim under a **Model-fit receipt** heading. Empty
+  result (insufficient evidence, or an all-subagent session with zero
+  `main_turn` rows) → omit the section entirely, no placeholder text.
 
 ### 4. Compose the handoff content
 
@@ -82,6 +90,10 @@ _Written: <YYYY-MM-DD HH:MM PT>_
 - Benched (should-have-fired):
   - <agent>: <rule that flagged it, e.g., "domain_mode=financial-code, no validator dispatched">
 (omit "Benched" subsection if no misses; omit whole section if no log file yet)
+
+## Model-fit receipt
+<one line from model_fit_receipt_line, verbatim>
+(omit whole section if pref is off, or the line is empty)
 ```
 
 ### 5. Write BOTH files

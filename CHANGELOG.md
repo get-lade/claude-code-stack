@@ -5,6 +5,39 @@ All notable changes to the Claude Code Stack are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- **Post-session model-fit receipt (ADR-033)**: at session end, a retrospective
+  one-line receipt names the model + est. cost actually used, the session's
+  workload shape (mechanical / mixed / generation-reasoning-heavy — a ratio of
+  generated tokens per edit-action, robust to context size), and a
+  cheaper/stronger alternative + its est. cost when the signal is clear. New
+  opt-in-by-default `session_prefs.model_fit_receipt` (`on` default | `off`).
+  One new `Stop` hook, `hooks/model-fit-turn.sh`, does two jobs: (1) appends a
+  single `main_turn` telemetry row per completed main-session turn to
+  `subagent-runs.jsonl` (tagged `event:"main_turn" agent:"main"` — the two
+  structural tags that structurally exclude all subagent/loop-cost rows from
+  the receipt, per ADR-011/012 cross-family subagents), with `tool_counts`
+  from a full transcript read, logically scoped to tool calls since the last
+  human prompt (same idiom as `brevity-drift.sh` — not I/O-bounded); (2)
+  at most once per session, prints the shared receipt line via
+  `<system-reminder>` as a fallback for users who never run `/handoff`
+  (dedupe flag `model-fit-receipt.<sid>.printed`, pruned at SessionStart like
+  `passive_suggest.*.nudged`). The shared ratio+cost calculator
+  `model_fit_receipt_line` (new, `skills/loop-engineer/loop_lib.sh`, reuses
+  `loop_cost_from_usage`) is called by both the hook and `/handoff`;
+  `/goodmorning` surfaces the previous session's line best-effort. New
+  `config/model-routing.json` `model_fit.tier_ladder` (haiku→sonnet→opus) is
+  the tier ladder the receipt walks, audited by `/model-audit` alongside
+  pricing. This ADR **supersedes its own original design**: a live in-session
+  watcher (PostToolUse accrual + Stop-hook drift nudge) was dropped after an
+  adversarial cross-family critique found it fail-open on real Claude Code
+  context sizes (≥40k input tokens always classified "reasoning"),
+  per-tool-call windowing broken by multi-edit turns, and no structural
+  subagent exclusion — the retrospective, ratio-based, main-session-only
+  redesign fixes all three. Wired through the ADR-017 parity contract
+  (parity test now covers 8 keys); registered in the tier-2 manifest (+ smoke
+  test) and `config/settings.team.template.json`; `/session` gains a
+  "Model-fit receipt" row; templates ship `on`. New `tests/test-model-fit.sh`.
+  `stack_version` 1.2.0 → 1.3.0.
 - **`simple_talk` — a plainness modifier orthogonal to length (ADR-032)**: new opt-in `session_prefs.simple_talk` (`off` default | `plain` | `caveman`) controls *how plainly* replies are written — plain words / no jargon (`plain`) or terse caveman phrasing (`caveman`) — independent of `communication_style`, which only sets length. Enforced by new `hooks/simple-talk.sh` (UserPromptSubmit), which reads the live session-state file and injects a per-turn directive when set, silent when `off`/absent (fail-safe: any error → no injection). Wired through the ADR-017 parity contract: `session_prefs` (stack-config schema), `session_prefs_defaults` (stack-defaults schema), and the `BUILTIN` baseline in `session-prefs-init.sh` (parity test now covers 7 keys); registered in the tier-0 manifest (+ smoke test) and `config/settings.global.template.json`; `/session` gains a "Simple talk" row; templates ship `off`. Default `off` = no behavior change for existing installs. `stack_version` 1.1.5 → 1.2.0.
 - **Codex review via the OpenAI API by default; CLI is now an opt-in transport (ADR-030)**: fixes a hard-fail where a `codex` binary present on PATH but blocked at execution (OS malware/quarantine) passed preflight (`command -v codex`) and then dead-stopped mid-`codex exec` — the API-fallback rung never fired because it keyed on "codex not on PATH". New helper `scripts/lib/openai-review.sh` (`oair_call`/`oair_transport`/`oair_available`, Chat Completions, key via `openai-key.sh`, ADR-011 Claude-model guard) is the single source of truth for transport: setting **`codex_transport`** (`api` default | `cli`), resolved env `REVIEW_CODEX_TRANSPORT` > project `.claude/stack-config.json` `.review.codex_transport` > default `api`. `api` never touches the CLI; `cli` runs `codex exec` and **falls back to the API automatically** on any failure. `cross-family-preflight.sh` is now transport-aware (in `api` mode a runnable CLI no longer counts as READY) and probes executability (`codex --version`) instead of PATH presence. The three OpenAI-family agents (reviewer, security-auditor, product-critic) call `oair_call` instead of branching `codex exec` themselves; their descriptions updated (registry regenerated). Tier-2/3 manifests demote the codex CLI check to **advisory** (`requirements[].advisory` + `advisory_smoke_tests`, non-fatal in `verify.sh`/`tier-installer.sh`) and install the new helper. Settable via `/project-init` (persists to `stack-config.json`) and `/session` (env). New `tests/test-openai-review.sh` (transport precedence + model guard) and transport-aware `tests/test-cross-family-preflight.sh`. `stack_version` 1.1.4 → 1.1.5.
 - **Karpathy ten-rule set — six loop-era rules added to the global standards**: `config/claude.md.global.template` gains an always-active **Loop & Self-Check Discipline** section (rules 5–10) on top of the four originals — Verification (reproduce-with-test before fixing), Goal-driven (machine-verifiable "done" before code), Debugging (full trace, reproduce, one variable at a time), Dependencies (stdlib first; every package is permanent code), Communication (useful uncertainty over vague reassurance), and Named failure modes (stop on Kitchen Sink / Wrong Abstraction / Optimistic Path / Runaway Refactor). `skills/loop-engineer/SKILL.md` step 6 references rules 5–10 as the per-iteration self-check gate, since a governed loop has no human reviewing each step. Landed in #64; source is the circulating ten-rule CLAUDE.md (provenance unconfirmed). `stack_version` bumped 1.1.3 → 1.1.4 so existing installs surface the freshness nudge.

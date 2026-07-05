@@ -24,6 +24,10 @@ mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
 find "$STATE_DIR" -maxdepth 1 -name 'passive_suggest.*.nudged' -mtime +0 -delete 2>/dev/null || true
 rm -f "$STATE_DIR/passive_suggest.nudged" 2>/dev/null || true
 
+# ADR-033: model-fit-receipt.<session_id>.printed is the same per-session,
+# ephemeral dedupe idiom — prune stale ones the same way.
+find "$STATE_DIR" -maxdepth 1 -name 'model-fit-receipt.*.printed' -mtime +0 -delete 2>/dev/null || true
+
 command -v jq >/dev/null 2>&1 || exit 0
 
 INPUT="$(cat 2>/dev/null || echo '{}')"
@@ -31,7 +35,7 @@ CWD="$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)"
 [ -z "$CWD" ] && CWD="$PWD"
 
 # Built-in baseline (matches the schema defaults).
-BUILTIN='{"communication_style":"balanced","model_effort":"balanced","explanation_verbosity":"normal","orchestration_mode":"main-thread","cost_alert_sensitivity":"normal","passive_suggest":true,"simple_talk":"off"}'
+BUILTIN='{"communication_style":"balanced","model_effort":"balanced","explanation_verbosity":"normal","orchestration_mode":"main-thread","cost_alert_sensitivity":"normal","passive_suggest":true,"simple_talk":"off","model_fit_receipt":"on"}'
 
 # Global defaults layer.
 G='{}'

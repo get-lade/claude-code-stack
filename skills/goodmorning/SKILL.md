@@ -129,6 +129,24 @@ Is the model lineup stale? Models and pricing shift; a monthly audit catches dri
 - If `last_audited` is absent OR `$DAYS >= 30`: set `Models:` line to `audit due (last: <date or never>) — run /model-audit`.
 - If `$DAYS < 30`: omit the line (don't clutter the summary).
 
+### 6g. Model-fit receipt for the previous session (ADR-033, best-effort)
+
+Surface last session's model-fit line if it wasn't already seen via `/handoff`.
+
+- Skip silently if `~/.claude/logs/subagent-runs.jsonl` is missing, or if
+  `session_prefs.model_fit_receipt` (from `current-prefs.json`, default `on`)
+  is `off`.
+- Skip silently if `skills/loop-engineer/loop_lib.sh` is missing.
+- Otherwise, source the lib and call `model_fit_receipt_line` scoped to the
+  **previous** session's `session_start` (the newest `main_turn` row's
+  `session_start` that is strictly earlier than this session's own start) and
+  its `project`, over the same log.
+- Empty result (no prior `main_turn` rows for this project — e.g. last
+  session was all-subagent work, or this is the first session ever) → skip
+  silently, no line in the summary.
+- If non-empty: fold into the `Models:` line area as a new `Fit:` line in the
+  Step 7 summary (see below).
+
 ### 7. Print summary
 
 Emit summary **inside a single ``` fenced code block** (no language tag). Caveman tone — drop articles, fragments OK, short. ≤7 lines. Use these exact labels:
@@ -141,6 +159,7 @@ Watch: <flags / pending SQL / stale TODOs>
 Team: <benched roles last 14d, comma list — or "all in play", or "no log yet">
 Stack: <N behind — run update.sh — omit line entirely if current/unknown>
 Models: <audit due (last: YYYY-MM-DD) — run /model-audit — omit if audited within 30 days>
+Fit: <last session's model-fit receipt line — omit if off/no prior main_turn data>
 Style: <communication_style·model_effort from current-prefs.json — "/session to change"; omit if no state file>
 Next: <one concrete action>
 ```

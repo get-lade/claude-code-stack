@@ -128,7 +128,8 @@
         "orchestration_mode": { "type": "string", "enum": ["main-thread", "agent-teams", "hybrid", "dynamic-workflows"], "description": "Session orchestration override; falls back to top-level orchestration_mode if unset." },
         "cost_alert_sensitivity": { "type": "string", "enum": ["relaxed", "normal", "strict"], "default": "normal" },
         "passive_suggest": { "type": "boolean", "default": true, "description": "When true, dispatch-nudge.sh appends a pointer to the recommend-capabilities engine. Set to false to silence the recommender pointer while keeping the /foreman//dispatch routing nudge." },
-        "simple_talk": { "type": "string", "enum": ["off", "plain", "caveman"], "default": "off", "description": "v1.3 (ADR-032): plainness/wording modifier, orthogonal to communication_style (which sets length). off = no change; plain = plain words, no jargon; caveman = terse caveman phrasing. Injected each turn by hooks/simple-talk.sh." }
+        "simple_talk": { "type": "string", "enum": ["off", "plain", "caveman"], "default": "off", "description": "v1.3 (ADR-032): plainness/wording modifier, orthogonal to communication_style (which sets length). off = no change; plain = plain words, no jargon; caveman = terse caveman phrasing. Injected each turn by hooks/simple-talk.sh." },
+        "model_fit_receipt": { "type": "string", "enum": ["off", "on"], "default": "on", "description": "v1.3 (ADR-033): post-session model-fit receipt. on (default) = at session end, print one retrospective line naming actual cost/model, the session's workload shape, and a cheaper/stronger alternative if the ratio-based signal is clear. off = no receipt; the main-session accrual hook (hooks/model-fit-turn.sh) writes nothing." }
       },
       "additionalProperties": false
     },

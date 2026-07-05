@@ -120,6 +120,11 @@
     "foreman-team-lead": { "primary": "anthropic/claude-opus-4-8", "notes": "v1.1: Used in agent-teams orchestration mode only. Main-thread mode uses foreman as a skill — no subagent invocation." },
     "local-ops": { "primary": "ollama/qwen2.5-coder:32b", "notes": "Tier 5 local subagent. Model string must match an ollama tag that tier-installer.sh actually pulls and HARDWARE.md recommends — keep these three in sync." }
   },
+  "model_fit": {
+    "_doc": "ADR-033 post-session receipt: the Anthropic tier ladder the receipt walks (cheap->strong). Ids MUST exist in providers.anthropic.models. /model-audit keeps this fresh alongside pricing. Ratio bands live in the hook/lib, not here.",
+    "_v1_tunable": true,
+    "tier_ladder": ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-8"]
+  },
   "review_tiers": {
     "_doc": "ADR-025 adversarial-review router tiers. Read by scripts/lib/review-router.sh (env var > this block > built-in default). Repoint models here when the Tier-5 local box lands — no script edit. Every tier MUST be a non-Claude family (ADR-011 cross-family rule); never set a Claude model here.",
     "_doc_codex_transport": "ADR-030: HOW the OpenAI/GPT-5.5 family is reached is a separate setting `codex_transport` (api|cli), NOT configured here. Default 'api' (scripts/lib/openai-review.sh, oair_call → OpenAI API); 'cli' uses `codex exec` with automatic API fallback. Resolution (highest first): env REVIEW_CODEX_TRANSPORT > project .claude/stack-config.json .review.codex_transport > default 'api'. Set per-project via /project-init, per-session via /session.",
