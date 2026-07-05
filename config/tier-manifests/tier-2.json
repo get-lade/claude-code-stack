@@ -57,7 +57,8 @@
       { "from": "hooks/loop-cost-monitor.sh", "to": "~/.claude/hooks/loop-cost-monitor.sh", "executable": true },
       { "from": "hooks/design-gate.sh", "to": "~/.claude/hooks/design-gate.sh", "executable": true },
       { "from": "hooks/loop-cost-accrual.sh", "to": "~/.claude/hooks/loop-cost-accrual.sh", "executable": true },
-      { "from": "hooks/loop-shape-nudge.sh", "to": "~/.claude/hooks/loop-shape-nudge.sh", "executable": true }
+      { "from": "hooks/loop-shape-nudge.sh", "to": "~/.claude/hooks/loop-shape-nudge.sh", "executable": true },
+      { "from": "hooks/model-fit-turn.sh", "to": "~/.claude/hooks/model-fit-turn.sh", "executable": true }
     ],
     "schemas": [
       { "from": "schemas/001-cost-log.sql", "apply_to_supabase": true }
@@ -133,7 +134,9 @@
     "test -x ~/.claude/scripts/lib/deepseek-review.sh",
     "test -x ~/.claude/scripts/lib/gemini-api.sh",
     "test -x ~/.claude/scripts/lib/openai-key.sh",
-    "test -x ~/.claude/scripts/lib/openai-review.sh"
+    "test -x ~/.claude/scripts/lib/openai-review.sh",
+    "test -x ~/.claude/hooks/model-fit-turn.sh",
+    "jq -e '[.hooks.Stop[]?.hooks[]? | select(.command | test(\"model-fit-turn.sh\"))] | length >= 1' ~/.claude/settings.json"
   ],
   "advisory_smoke_tests": [
     "command -v codex"

@@ -19,6 +19,10 @@ Audit model assignments against current state of the world.
 ### 1. Pull current state
 - Read `~/.claude/config/model-routing.json` for current assignments.
 - Note the `last_audited` date.
+- Audit `model_fit.tier_ladder` (ADR-033) alongside pricing: it must stay a
+  cheap→strong Anthropic tier list whose every id exists in
+  `providers.anthropic.models`. Update it in the same pass if a tier id is
+  renamed/retired.
 
 ### 2. Refresh pricing
 For each model in current use:

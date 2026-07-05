@@ -19,9 +19,11 @@ Look at what subagents actually did. Find what's not working.
 
 Source: `~/.claude/logs/subagent-runs.jsonl` (append-only, written by the PreToolUse Agent hook `~/.claude/hooks/subagent-log.sh`). Each row has `ts`, `agent`, `desc`, `model`, `project`, `session_start`.
 
+**Filter by event** — this log also carries non-dispatch rows (`event=="main_turn"` from ADR-033's model-fit accrual, `event=="workflow_dispatch"`, loop-cost rows, etc.). Exclude all of them the same way `/handoff`/`/goodmorning`/`/team-status` do, or `main_turn` rows get counted as a subagent literally named `"main"`:
+
 ```bash
 CUTOFF=$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)
-jq -r --arg c "$CUTOFF" 'select(.ts >= $c) | .agent' ~/.claude/logs/subagent-runs.jsonl \
+jq -r --arg c "$CUTOFF" 'select(.ts >= $c) | select((.event // "dispatch") == "dispatch") | select(.agent != "workflow") | .agent' ~/.claude/logs/subagent-runs.jsonl \
   | sort | uniq -c | sort -rn
 ```
 

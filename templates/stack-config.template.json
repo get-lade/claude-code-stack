@@ -1,6 +1,6 @@
 {
   "$schema": "https://github.com/bschonbrun/claude-code-stack/schemas/stack-config-schema.json",
-  "stack_version": "1.2.0",
+  "stack_version": "1.3.0",
   "stack_tier": 2,
   "purpose": "<one-line description>",
   "created": "YYYY-MM-DD",
@@ -32,7 +32,8 @@
     "model_effort": "balanced",
     "explanation_verbosity": "normal",
     "cost_alert_sensitivity": "normal",
-    "simple_talk": "off"
+    "simple_talk": "off",
+    "model_fit_receipt": "on"
   },
   "loop_policy": {
     "enabled": true,
