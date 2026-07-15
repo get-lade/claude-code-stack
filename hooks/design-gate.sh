@@ -34,7 +34,7 @@ FP="$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty'
 
 # Always allow docs and tests (you must be able to author the design + tests).
 case "$FP" in
-  */docs/*|docs/*|*/tests/*|tests/*) exit 0 ;;
+  */docs/*|docs/*|*/tests/*|tests/*|*/__tests__/*|__tests__/*|*.test.*|*.spec.*) exit 0 ;;
 esac
 
 # Only gate SOURCE files; allow everything else (markdown, config, data, ...).
