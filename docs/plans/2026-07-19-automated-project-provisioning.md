@@ -1,7 +1,14 @@
 # Automated project provisioning for Claude Code apps (CarboNet)
 
 **Date:** 2026-07-19
-**Status:** Initial design for review
+**Status:** Updated 2026-07-19 — owner decision: the provisioning engine is a **standalone
+service**, NOT part of claude-code-stack. The stack stays a config layer and grows only thin
+client skills (`/project-init` provisioning step, `/publish`, `/project-teardown`) that call
+the engine's API. The engine itself — architecture, publish button, GlideOS migration, Laid
+convergence — is planned in
+`Architect-for-Claude-Code/docs/plans/2026-07-19-provisioning-engine-standalone.md`.
+Sections below stand as the vendor-feasibility research and the stack-integration spec;
+read "Worker" as the standalone engine.
 **Problem:** Every new CarboNet project scaffolded with the stack still requires manual setup
 of the GitHub repo, Clerk application + org, Supabase project, and Netlify site — all done by
 one person, by hand. Goal: `/project-init` (or a sibling skill) provisions all of it
