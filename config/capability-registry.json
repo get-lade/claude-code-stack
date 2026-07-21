@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-03T12:34:30Z",
+  "generated_at": "2026-07-21T22:39:56Z",
   "stack_version": "1.1.5",
   "capabilities": [
     {
@@ -434,10 +434,10 @@
     {
       "id": "integration-specialist",
       "kind": "subagent",
-      "summary": "Use when working with external APIs \u2014 Pipedream, Xero, Twilio, Slack, OpenAI/Anthropic/Google APIs, Stripe, anything with a vendor SDK.",
+      "summary": "Use when working with external APIs \u2014 Pipedream, accounting APIs, Twilio, Slack, OpenAI/Anthropic/Google APIs, Stripe, anything with a vendor SDK.",
       "invocation": {
         "slash": null,
-        "natural_language": "use when working with external APIs \u2014 Pipedream, Xero, Twilio, Slack, OpenAI/Anthropic/Google APIs, Stripe, anything with a vendor SDK"
+        "natural_language": "use when working with external APIs \u2014 Pipedream, accounting APIs, Twilio, Slack, OpenAI/Anthropic/Google APIs, Stripe, anything with a vendor SDK"
       },
       "tier_min": 0,
       "user_invocable": false,
