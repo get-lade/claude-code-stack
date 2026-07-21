@@ -50,7 +50,7 @@ You handle operational concerns: is the deploy live? Are MCPs authenticated? Are
 
 ## Secrets
 - supabase-management-token: ✓
-- pipedream-client-secret: ⚠ (last rotated 89 days ago — consider rotating)
+- <vendor>-client-secret: ⚠ (last rotated 89 days ago — consider rotating)
 
 ## Cost (last 7 days vs prior 7 days)
 - Total: $<X> vs $<Y> (<delta>%)

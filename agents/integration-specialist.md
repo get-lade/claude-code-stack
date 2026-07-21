@@ -1,6 +1,6 @@
 ---
 name: integration-specialist
-description: Use when working with external APIs — Pipedream, Xero, Twilio, Slack, OpenAI/Anthropic/Google APIs, Stripe, anything with a vendor SDK. Owns retry logic, rate limiting, contract changes, vendor-specific gotchas. Invoked when work touches functions/<integration>/ or scripts/<integration>-* paths.
+description: Use when working with external APIs — Pipedream, accounting APIs, Twilio, Slack, OpenAI/Anthropic/Google APIs, Stripe, anything with a vendor SDK. Owns retry logic, rate limiting, contract changes, vendor-specific gotchas. Invoked when work touches functions/<integration>/ or scripts/<integration>-* paths.
 model: sonnet
 ---
 

@@ -560,7 +560,7 @@ r="$(loop_check_bounds '{"iteration":1,"bounds":{"max_iterations":99},"cost_so_f
   unset CLAUDE_ULTRACODE; loop_ultracode_active && echo "on" || echo "off" ) | { read -r r; [[ "$r" == "on" ]] && ok "ultracode: state on" || bad "ultracode state $r"; }
 rm -f "$HOME/.claude/session-state/ultracode-state.json" 2>/dev/null
 # Follow-up fix: explicit state file is AUTHORITATIVE over the CLAUDE_ULTRACODE env
-# (carbonet-dashboards bug — /ultracode off was a no-op when the harness injected
+# (dashboard-repo bug — /ultracode off was a no-op when the harness injected
 # the env var). Assertions run in the MAIN shell so failures actually count; env is
 # scoped to each `bash -c` subprocess, which also exercises bash 3.2 portability.
 mkdir -p "$HOME/.claude/session-state"; UCF="$HOME/.claude/session-state/ultracode-state.json"

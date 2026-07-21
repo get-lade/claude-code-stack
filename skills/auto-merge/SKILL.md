@@ -31,7 +31,7 @@ A repo that already has `run-tests` goes straight to Phase 2.
 /auto-merge off <repo>        # revert ruleset + flag + workflow
 ```
 
-`<repo>` may be `name` (assumes `CarboNet-Nano` org) or `owner/name`. Resolve to `OWNER/REPO` before any API call.
+`<repo>` may be `name` or `owner/name`. A bare `name` resolves to the active tenant pack's GitHub org (`tenant.json → github.org`, via `~/.claude/stack-defaults.json → tenant_pack`); if no pack is configured, error and ask for `owner/name`. Resolve to `OWNER/REPO` before any API call.
 
 ## Required check contract
 
