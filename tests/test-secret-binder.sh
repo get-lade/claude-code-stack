@@ -195,7 +195,75 @@ if [[ -s "$TMP/w9.toml" ]]; then
   exit 1
 fi
 
-# 10. LIVE smoke (opt-in): read-only against the CarboNet store
+# 10. Malformed .secrets (string, not array) — must fail closed, NOT read as
+# "no secrets declared" (the silent zero-bindings deploy)
+jq '.secrets = "CARBONET_NOT_AN_ARRAY"' "$TMP/tenant.json" > "$TMP/t10.json"
+if bind_tenant_secrets "$TMP/t10.json" "$TMP/w10.toml" > /dev/null 2>&1; then
+  echo "FAIL: malformed .secrets treated as empty (fail-open)"
+  exit 1
+fi
+if [[ -s "$TMP/w10.toml" ]]; then
+  echo "FAIL: malformed .secrets still wrote TOML"
+  exit 1
+fi
+
+# 11. Unsafe secret name (TOML breakout chars) rejected before emit
+jq '.secrets = ["CARBONET_X\" ]]\nevil = \"y"]' "$TMP/tenant.json" > "$TMP/t11.json"
+if bind_tenant_secrets "$TMP/t11.json" "$TMP/w11.toml" > /dev/null 2>&1; then
+  echo "FAIL: quote-bearing secret name accepted"
+  exit 1
+fi
+
+# 12. Bad account_id shape rejected
+jq '.deploy.cloudflare.account_id = "not-hex"' "$TMP/tenant.json" > "$TMP/t12.json"
+if bind_tenant_secrets "$TMP/t12.json" "$TMP/w12.toml" > /dev/null 2>&1; then
+  echo "FAIL: non-hex account_id accepted"
+  exit 1
+fi
+
+# 13. Duplicate managed markers — refuse instead of silently mangling
+cat > "$TMP/w13.toml" << 'EOF'
+name = "x"
+
+# STACK_SECRETS_MANAGED
+# /STACK_SECRETS_MANAGED
+
+# STACK_SECRETS_MANAGED
+# /STACK_SECRETS_MANAGED
+EOF
+cp "$TMP/w13.toml" "$TMP/w13.orig"
+if bind_tenant_secrets "$TMP/tenant.json" "$TMP/w13.toml" > /dev/null 2>&1; then
+  echo "FAIL: duplicate managed regions accepted"
+  exit 1
+fi
+if ! diff -q "$TMP/w13.orig" "$TMP/w13.toml" > /dev/null; then
+  echo "FAIL: duplicate-marker failure still mutated the file"
+  exit 1
+fi
+
+# 14. xtrace must not leak the token (set -x suppressed in token paths)
+TRACE_OUT="$(bash -c '
+  source "'"$REPO_ROOT"'/scripts/lib/secret-binder.sh"
+  export CARBONET_API_TOKEN="'"$SENTINEL"'"
+  set -x
+  resolve_tenant_token carbonet "" >/dev/null 2>/tmp/dev-null-substitute
+' 2>&1 || true)"
+if grep -q "$SENTINEL" <<<"$TRACE_OUT"; then
+  echo "FAIL: set -x leaked the token to trace output"
+  exit 1
+fi
+
+# 15. CF_API_BASE cannot be redirected from env (token goes to the real host)
+BASE_CHECK="$(bash -c '
+  export CF_API_BASE="https://evil.example"
+  source "'"$REPO_ROOT"'/scripts/lib/secret-binder.sh"
+  echo "$CF_API_BASE"')"
+if [[ "$BASE_CHECK" != "https://api.cloudflare.com/client/v4" ]]; then
+  echo "FAIL: CF_API_BASE overridable from env"
+  exit 1
+fi
+
+# 16. LIVE smoke (opt-in): read-only against the CarboNet store
 if [[ -n "${RUN_LIVE_CF_SMOKE:-}" ]]; then
   if [[ -z "${CARBONET_API_TOKEN:-}" || "$CARBONET_API_TOKEN" == "$SENTINEL" ]]; then
     echo "SKIP live smoke: real CARBONET_API_TOKEN not in env"

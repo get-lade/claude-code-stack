@@ -96,6 +96,7 @@
             },
             "api_token_keychain_item": {
               "type": "string",
+              "pattern": "^[A-Za-z0-9._-]+$",
               "description": "macOS Keychain item name holding the tenant API token — secret-binder's local fallback when <TENANT>_API_TOKEN is not in env. Names an item, never a value."
             }
           },
@@ -135,5 +136,20 @@
       "description": "Secret NAMES only, never values (ADR-034, ADR-035 §5). Provisioner resolves each name to a Cloudflare Secrets Store id and emits wrangler bindings."
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "if": {
+    "properties": { "secrets": { "minItems": 1 } },
+    "required": ["secrets"]
+  },
+  "then": {
+    "properties": {
+      "deploy": {
+        "properties": {
+          "cloudflare": { "required": ["account_id"] }
+        },
+        "required": ["cloudflare"]
+      }
+    },
+    "required": ["deploy"]
+  }
 }
