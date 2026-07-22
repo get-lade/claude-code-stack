@@ -56,7 +56,7 @@ that blocks a live smoke.
 - **Clerk is the sequencing risk.** If Platform API partner access is slow/denied, ship with the **manual-app fallback (2b)** and keep the auto-create path behind a feature flag until access lands. Do not block the whole provisioner on Clerk.
 - **Pipedream uses Connect API, not REST** — point the integration at Connect from the start; the REST path is a dead end for project-create.
 
-## Open decisions for the maintainer
+## Decisions
 
-1. Clerk: request Platform API partner access now (path a), or ship with manual-app fallback (path b) and revisit? (MCQ-worthy — affects how automated the auth step is at launch.)
-2. Whether to run the three live smokes now (needs Neon + Pipedream keys; Clerk blocked on access) or defer until the provisioner skeleton exists.
+1. **Clerk → path b (DECIDED 2026-07-22).** Ship with manual app-creation per tenant in the Clerk dashboard; the provisioner reads the publishable/secret keys from the tenant's CF Secrets Store (fits ADR-035). Do NOT block the provisioner on Platform API partner access. Auto app-create (path a) is a later enhancement behind a feature flag once/if partner access lands.
+2. Open: run the three live smokes now (needs Neon + Pipedream keys) or defer until the provisioner skeleton exists.

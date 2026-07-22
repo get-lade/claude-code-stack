@@ -262,11 +262,11 @@ replacement skill).
    overlay-wins test in the same PR, and run **cross-family review** (Codex + Gemini
    API) before merge — this class of change is exactly where cross-family review
    caught the ADR-025 fail-open.
-2. **User hand-edits to global `~/.claude` JSON lose to the pack** under Approach A.
-   Contract-consistent (global defaults < pack) but potentially surprising.
-   Mitigation: `.pack-overrides` report + step-1 backup. If the maintainer wants
-   hand-edit preservation instead, that is Approach B (three-way, base = core) — a
-   user decision, not an implementer one.
+2. **Approach A chosen (DECIDED 2026-07-22).** Order-based pack-wins: the pack
+   overwrites conflicting global `~/.claude` JSON values, every override logged to
+   `<target>.pack-overrides`, recoverable from the step-1 backup. Approach B
+   (three-way preserve hand-edits) is rejected for M3. Implement `merge_json_pack_wins`
+   accordingly; do not add provenance/base-file plumbing.
 3. **"Project wins" is enforced read-time, distributed across hooks/skills.** Any
    consumer that reads `stack-defaults.json` directly without the chain silently
    breaks project-over-pack. Follow-up audit task: grep consumers of stack-defaults
