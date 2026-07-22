@@ -77,6 +77,20 @@
         "model_fit_receipt": { "type": "string", "enum": ["off", "on"], "default": "on", "description": "v1.3 (ADR-033): post-session model-fit receipt (off/on). on = print one retrospective end-of-session line; off = no receipt, no accrual." }
       },
       "additionalProperties": false
+    },
+    "tenant_pack": {
+      "type": "object",
+      "description": "M3 (ADR-034): the tenant pack composed over this install. Written by install.sh --pack after a successful compose.",
+      "required": ["tenant_id", "path"],
+      "properties": {
+        "tenant_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$" },
+        "source": { "type": "string", "description": "Git URL or local path the pack was installed from." },
+        "ref": { "type": "string", "description": "Git ref requested at install time, if any." },
+        "pack_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "path": { "type": "string", "description": "Durable local copy: ~/.claude/packs/<tenant_id>." },
+        "installed_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

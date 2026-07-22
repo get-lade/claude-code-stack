@@ -17,3 +17,8 @@
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Local secrets — never commit
+.env
+.env.*
+!.env.example

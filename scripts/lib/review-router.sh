@@ -151,13 +151,33 @@ rr_classify_stakes() {
   mb="$(git merge-base "$base" "$head" 2>/dev/null)" || { echo "high merge-base failed (fail-safe)"; return; }
   files="$(git diff --name-only "$mb..$head" 2>/dev/null)" || { echo "high git diff failed (fail-safe)"; return; }
 
+  # Uncommitted work is part of what gets reviewed when head is the current
+  # checkout: two reviews (2026-07-11) classified "routine" against an EMPTY
+  # commit-range diff while high-stakes files sat untracked in the working tree.
+  # Scan `git status --porcelain -uall` paths (modified + staged + untracked,
+  # incl. files inside untracked dirs) whenever head == HEAD — always, not only
+  # when the range is empty: fail-safe bias means a risky uncommitted file must
+  # flag high even alongside a routine committed diff. Skipped when head is not
+  # the current checkout (working-tree state is unrelated to that range).
+  local wt=""
+  if [[ "$(git rev-parse --verify --quiet "${head}^{commit}" 2>/dev/null)" == "$(git rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null)" ]]; then
+    wt="$(git status --porcelain -uall 2>/dev/null)" || { echo "high git status failed (fail-safe)"; return; }
+    wt="$(printf '%s\n' "$wt" | cut -c4-)"
+  fi
+
   if [[ -n "$files" ]]; then
     hit="$(printf '%s\n' "$files" | grep -iE "$RR_HIGH_STAKES_RE" | head -1)"
     if [[ -n "$hit" ]]; then
       echo "high risk-path: ${hit}"; return
     fi
   fi
-  echo "routine no high-stakes paths in diff"
+  if [[ -n "$wt" ]]; then
+    hit="$(printf '%s\n' "$wt" | grep -iE "$RR_HIGH_STAKES_RE" | head -1)"
+    if [[ -n "$hit" ]]; then
+      echo "high risk-path (uncommitted): ${hit}"; return
+    fi
+  fi
+  echo "routine no high-stakes paths in diff or working tree"
 }
 
 # --- local-model availability (cloud-safety) ----------------------------------

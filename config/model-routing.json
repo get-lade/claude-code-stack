@@ -1,8 +1,8 @@
 {
-  "version": "1.4.0",
-  "last_audited": "2026-05-16",
-  "next_audit_due": "2026-06-16",
-  "verification_note": "Model IDs and pricing verified 2026-05-15. /model-audit re-verifies monthly. Verify live before any cost-sensitive operation.",
+  "version": "1.5.0",
+  "last_audited": "2026-07-15",
+  "next_audit_due": "2026-08-15",
+  "verification_note": "Model IDs and pricing verified 2026-07-15 (claude-fable-5, claude-sonnet-5, gpt-5.6-terra, grok-4.5 all verified live via provider /models endpoints). /model-audit re-verifies monthly. Verify live before any cost-sensitive operation. Applied per docs/model-audits/2026-07-15.md (owner-approved).",
   "providers": {
     "anthropic": {
       "api_key_keychain": "anthropic-api-key",
@@ -33,6 +33,25 @@
           "pricing_per_million_input": 1.00,
           "pricing_per_million_output": 5.00,
           "pricing_verified_date": "2026-05-15"
+        },
+        "claude-sonnet-5": {
+          "api_model_id": "claude-sonnet-5",
+          "context_window": 1000000,
+          "max_output": 64000,
+          "supports_caching": true,
+          "pricing_per_million_input": 2.00,
+          "pricing_per_million_output": 10.00,
+          "pricing_note": "INTRO pricing through 2026-08-31, then $3/$15. New tokenizer produces ~30% more tokens for the same text vs Sonnet 4.6 — budget projections must use measured tokens (2026-07-15 audit).",
+          "pricing_verified_date": "2026-07-15"
+        },
+        "claude-fable-5": {
+          "api_model_id": "claude-fable-5",
+          "context_window": 1000000,
+          "supports_caching": true,
+          "pricing_per_million_input": 10.00,
+          "pricing_per_million_output": 50.00,
+          "pricing_note": "Cache hit $1/MTok, 5m cache write $12.50/MTok. New tokenizer (~30% more tokens). Escalation-only ceiling (sonnet -> opus -> fable -> human), never steady-state (~2x Opus cost). Eval-crowned 2026-07-01: quality 3.90 > Opus 3.60, silent-corruption 4/20 vs 11/20.",
+          "pricing_verified_date": "2026-07-15"
         }
       }
     },
@@ -92,38 +111,60 @@
           "pricing_verified_date": "2026-06-30"
         }
       },
-      "notes": "ADR-026 + ADR-029: DeepSeek-v4 third adversarial voice via scripts/lib/deepseek-review.sh, advisory. CHINA-HOSTED → ROUTINE/non-sensitive diffs ONLY; the helper's data-residency guard hard-blocks (return 8) any high-stakes/sensitive content regardless of caller. Wired into reviewer (routine), effectively-off for security-auditor, and NOT used by red-team (always high-stakes). Cross-family (ADR-011): non-Claude — never point at a Claude model. deepseek-chat/reasoner ids retire 2026-07-24; use v4 ids. Key: macOS Keychain 'deepseek-cn-api-key' (env DEEPSEEK_CN_API_KEY)."
+      "notes": "ADR-026 + ADR-029: DeepSeek-v4 third adversarial voice via scripts/lib/deepseek-review.sh, advisory. CHINA-HOSTED → ROUTINE/non-sensitive diffs ONLY; the helper's data-residency guard hard-blocks (return 8) any high-stakes/sensitive content regardless of caller. Wired into reviewer (routine), effectively-off for security-auditor, and NOT used by red-team (always high-stakes). Cross-family (ADR-011): non-Claude — never point at a Claude model. deepseek-chat/reasoner ids retire 2026-07-24; use v4 ids. Key: macOS Keychain 'deepseek-cn-api-key' (env DEEPSEEK_CN_API_KEY). NEW 2026-07-15: official V4 launch adds 2x baseline pricing during Beijing peak hours (9-12 & 14-18 CST) — advisory role, accepted; note in cost expectations for overnight/loop runs."
+    },
+    "xai": {
+      "data_residency": "US-hosted — no ADR-029-style residency block needed.",
+      "api_base": "https://api.x.ai/v1",
+      "endpoint": "/chat/completions",
+      "openai_compatible": true,
+      "api_key_keychain": "GROK_API_KEY",
+      "api_key_env_fallback": "GROK_API_KEY",
+      "supports_caching": true,
+      "pricing_note": "billed via the xAI API key; like codex/gemini/deepseek it is NOT metered into cost_log.",
+      "models": {
+        "grok-4.5": {
+          "api_model_id": "grok-4.5",
+          "context_window": 500000,
+          "pricing_per_million_input": 2.00,
+          "pricing_per_million_input_cache_hit": 0.50,
+          "pricing_per_million_output": 6.00,
+          "pricing_note": "Surcharge above 200K context. Verified live 2026-07-15.",
+          "pricing_verified_date": "2026-07-15"
+        }
+      },
+      "notes": "2026-07-15 audit (owner decision, option b): Grok 4.5 PILOT as fourth advisory voice on routine reviews — peer of the DeepSeek third voice. Advisory-only, never blocks; no steady-state/blocking role until it passes the silent-corruption bake-off (ADR-040 loop, same bar as GPT-5.6 Sol). New cross-family lineage (xAI ≠ Claude/OpenAI/Google/DeepSeek). SWE-bench Verified 86.6%, #1 agentic tool use, cheapest frontier-class voice. Helper scripts/lib/grok-review.sh — TO CREATE (open follow-up). Key verified in macOS Keychain 2026-07-15."
     }
   },
   "subagent_assignments": {
     "architect": { "primary": "anthropic/claude-opus-4-8" },
-    "implementer": { "primary": "anthropic/claude-sonnet-4-6", "escalation": "anthropic/claude-opus-4-8" },
-    "validator": { "primary": "anthropic/claude-sonnet-4-6", "escalation": "anthropic/claude-opus-4-8" },
-    "reviewer": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.4", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: adversarial review via local Codex CLI — see ADR-011. ADR-025: tiered by stakes via scripts/lib/review-router.sh — high-stakes diffs use codex/gpt-5.5@high; routine diffs use local Qwen first, escalate to codex/gpt-5.4. Both tiers stay cross-family (never Claude). Model IDs resolved from review_tiers below." },
-    "tester": { "primary": "anthropic/claude-sonnet-4-6" },
-    "documenter": { "primary": "anthropic/claude-sonnet-4-6" },
+    "implementer": { "primary": "anthropic/claude-sonnet-5", "escalation": "anthropic/claude-opus-4-8" },
+    "validator": { "primary": "anthropic/claude-sonnet-5", "escalation": "anthropic/claude-opus-4-8" },
+    "reviewer": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.6-terra", "orchestrated_by": "anthropic/claude-sonnet-5", "notes": "v1.1.1: adversarial review via local Codex CLI — see ADR-011. ADR-025: tiered by stakes via scripts/lib/review-router.sh — high-stakes diffs use codex/gpt-5.5@high; routine diffs use local Qwen first, escalate to codex/gpt-5.4. Both tiers stay cross-family (never Claude). Model IDs resolved from review_tiers below." },
+    "tester": { "primary": "anthropic/claude-sonnet-5" },
+    "documenter": { "primary": "anthropic/claude-sonnet-5" },
     "scribe": { "primary": "anthropic/claude-haiku-4-5-20251001" },
-    "ops": { "primary": "anthropic/claude-haiku-4-5-20251001", "escalation": "anthropic/claude-sonnet-4-6" },
-    "product-critic": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.4", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: product critique via local Codex CLI — see ADR-011. ADR-025: tiered by stakes (review-router.sh); product critique is rarely high-stakes so usually routes routine (local Qwen). Cross-family preserved." },
+    "ops": { "primary": "anthropic/claude-haiku-4-5-20251001", "escalation": "anthropic/claude-sonnet-5" },
+    "product-critic": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.6-terra", "orchestrated_by": "anthropic/claude-sonnet-5", "notes": "v1.1.1: product critique via local Codex CLI — see ADR-011. ADR-025: tiered by stakes (review-router.sh); product critique is rarely high-stakes so usually routes routine (local Qwen). Cross-family preserved." },
     "designer": { "primary": "anthropic/claude-opus-4-8" },
-    "red-team": { "primary": "gemini/gemini-2.5-pro", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: red-team analysis via local Gemini CLI — see ADR-012." },
-    "security-auditor": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.4", "second_pass": "anthropic/claude-opus-4-8", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: primary audit via local Codex CLI; belt-and-suspenders Opus second pass on novel crypto/auth — see ADR-011. ADR-025: tiered by stakes (review-router.sh). Security work classifies high more often (security/auth/crypto paths → gpt-5.5@high); the Opus second pass on novel crypto/auth is UNCHANGED." },
+    "red-team": { "primary": "gemini/gemini-3.1-pro-preview", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: red-team analysis via local Gemini CLI — see ADR-012." },
+    "security-auditor": { "primary": "codex/gpt-5.5", "routine_primary": "local/qwen2.5-coder:32b", "routine_escalation": "codex/gpt-5.6-terra", "second_pass": "anthropic/claude-opus-4-8", "orchestrated_by": "anthropic/claude-sonnet-5", "notes": "v1.1.1: primary audit via local Codex CLI; belt-and-suspenders Opus second pass on novel crypto/auth — see ADR-011. ADR-025: tiered by stakes (review-router.sh). Security work classifies high more often (security/auth/crypto paths → gpt-5.5@high); the Opus second pass on novel crypto/auth is UNCHANGED." },
     "performance-engineer": { "primary": "anthropic/claude-opus-4-8" },
     "data-engineer": { "primary": "anthropic/claude-opus-4-8" },
-    "integration-specialist": { "primary": "anthropic/claude-sonnet-4-6" },
+    "integration-specialist": { "primary": "anthropic/claude-sonnet-5" },
     "incident-commander": { "primary": "anthropic/claude-opus-4-8" },
-    "architecture-critic": { "primary": "gemini/gemini-2.5-pro", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: whole-repo architectural critique via local Gemini CLI — see ADR-012." },
-    "accessibility-auditor": { "primary": "anthropic/claude-sonnet-4-6" },
-    "historian": { "primary": "gemini/gemini-2.5-pro", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: long-context history review via local Gemini CLI — see ADR-012. Tier 4 subagent." },
+    "architecture-critic": { "primary": "gemini/gemini-3.1-pro-preview", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: whole-repo architectural critique via local Gemini CLI — see ADR-012." },
+    "accessibility-auditor": { "primary": "anthropic/claude-sonnet-5" },
+    "historian": { "primary": "gemini/gemini-3.1-pro-preview", "orchestrated_by": "anthropic/claude-sonnet-4-6", "notes": "v1.1.1: long-context history review via local Gemini CLI — see ADR-012. Tier 4 subagent." },
     "librarian": { "primary": "anthropic/claude-haiku-4-5-20251001" },
-    "estimator": { "primary": "anthropic/claude-sonnet-4-6" },
+    "estimator": { "primary": "anthropic/claude-sonnet-5" },
     "foreman-team-lead": { "primary": "anthropic/claude-opus-4-8", "notes": "v1.1: Used in agent-teams orchestration mode only. Main-thread mode uses foreman as a skill — no subagent invocation." },
     "local-ops": { "primary": "ollama/qwen2.5-coder:32b", "notes": "Tier 5 local subagent. Model string must match an ollama tag that tier-installer.sh actually pulls and HARDWARE.md recommends — keep these three in sync." }
   },
   "model_fit": {
     "_doc": "ADR-033 post-session receipt: the Anthropic tier ladder the receipt walks (cheap->strong). Ids MUST exist in providers.anthropic.models. /model-audit keeps this fresh alongside pricing. Ratio bands live in the hook/lib, not here.",
     "_v1_tunable": true,
-    "tier_ladder": ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-8"]
+    "tier_ladder": ["claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-4-8", "claude-fable-5"]
   },
   "review_tiers": {
     "_doc": "ADR-025 adversarial-review router tiers. Read by scripts/lib/review-router.sh (env var > this block > built-in default). Repoint models here when the Tier-5 local box lands — no script edit. Every tier MUST be a non-Claude family (ADR-011 cross-family rule); never set a Claude model here.",
@@ -132,13 +173,14 @@
       "engine": "codex",
       "model": "gpt-5.5",
       "effort": "high",
-      "when": "diff touches auth/crypto/payment/migration/RLS/secret paths, or domain-mode security|schema-migration, or sensitivity=high"
+      "when": "diff touches auth/crypto/payment/migration/RLS/secret paths, or domain-mode security|schema-migration, or sensitivity=high",
+      "pilot_note": "2026-07-15 audit: gpt-5.6-sol PILOT only — 2-week shadow on the same high-stakes diffs, gated on silent-corruption catches (ADR-040 watchdog). Promotion BLOCKED until it passes: METR found Sol gamed its SWE eval at the highest detected rate of any publicly tested model."
     },
     "routine": {
       "engine": "local",
       "model": "qwen2.5-coder:32b",
       "escalation_engine": "codex",
-      "escalation_model": "gpt-5.4",
+      "escalation_model": "gpt-5.6-terra",
       "escalation_effort": "medium",
       "when": "everything else; run local Qwen first, escalate to escalation_model only on low-confidence or non-trivial diff",
       "tier5_note": "When the high-RAM/GPU box arrives, repoint model (and optionally escalation_model) to a larger local model — e.g. qwen2.5-coder:72b / kimi / deepseek-class. A strong enough local model can also absorb the high tier, driving OpenAI review spend toward $0. Track under the Tier-5 local-model expansion plan.",
@@ -150,11 +192,22 @@
         "data_residency": "CHINA",
         "helper": "scripts/lib/deepseek-review.sh",
         "when": "ROUTINE / non-sensitive diffs ONLY (ADR-029) — additive to the routine review, never auto-blocks. China-hosted: the helper hard-blocks (return 8) any high-stakes/sensitive content (auth/crypto/secret/payment/migration, sensitivity=high, domain-mode security|schema-migration) regardless of caller. Moved off the high tier — it must never see high-stakes code."
+      },
+      "fourth_voice": {
+        "engine": "xai",
+        "model": "grok-4.5",
+        "advisory": true,
+        "blocks": false,
+        "data_residency": "US",
+        "helper": "scripts/lib/grok-review.sh",
+        "status": "PILOT (2026-07-15 audit, owner decision option b) — helper script not yet created",
+        "when": "Routine reviews, additive fourth advisory voice (peer of the DeepSeek third voice), never auto-blocks. US-hosted — no residency hard-block. No steady-state/blocking role until it passes the silent-corruption bake-off (ADR-040); if the 2-week shadow passes, revisit routine-escalation (option a) or red-team (option c) next audit."
       }
     }
   },
   "notes": [
-    "ADR-025: adversarial review (reviewer, security-auditor, product-critic) is tiered by stakes via scripts/lib/review-router.sh — high → codex/gpt-5.5@high; routine → local Qwen first, escalate codex/gpt-5.4. Scope fixed to the diff (base..head), not whole-repo. Routes log to subagent-runs.jsonl (event:review_route) to verify the high/routine split. Cross-family (ADR-011) holds on both tiers.",
+    "ADR-025: adversarial review (reviewer, security-auditor, product-critic) is tiered by stakes via scripts/lib/review-router.sh — high → codex/gpt-5.5@high; routine → local Qwen first, escalate codex/gpt-5.6-terra. Scope fixed to the diff (base..head), not whole-repo. Routes log to subagent-runs.jsonl (event:review_route) to verify the high/routine split. Cross-family (ADR-011) holds on both tiers.",
+    "v1.5.0 (2026-07-15 audit, applied 2026-07-16 at SOURCE — ~/Antigravity/claude-code-stack — because tier-manifest installs re-copy this file into ~/.claude and had reverted three prior applies): sonnet roles → claude-sonnet-5; gemini roles → gemini-3.1-pro-preview; + claude-fable-5/claude-sonnet-5 provider entries; tier_ladder gains sonnet-5 + fable-5; routine review escalation → gpt-5.6-terra; xai provider + Grok 4.5 fourth advisory voice (PILOT). Fable 5 = manual above-Opus escalation ceiling, escalation-only, never steady-state. Open follow-ups: create scripts/lib/grok-review.sh; Sept audit bumps Sonnet 5 to $3/$15.",
     "v1.1.1 change: OpenAI/GPT-5.5-family work routes through the local Codex CLI (provider `codex`); Gemini-family work routes through the local Gemini CLI (provider `gemini`). Neither uses a direct API key. Adversarial roles run on a Claude model and orchestrate the respective CLI. See ADR-011 (Codex) and ADR-012 (Gemini).",
     "v1.1 change: Foreman is a skill (skills/foreman/SKILL.md) in main-thread orchestration mode. Only in agent-teams mode is foreman a separate session (team-lead role).",
     "Pricing verified against vendor docs on 2026-05-15. Anthropic: platform.claude.com. Apr 2026 friction was a 3.4x cost underforecast — verify live before any cost-sensitive operation.",

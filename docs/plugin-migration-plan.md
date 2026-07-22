@@ -108,7 +108,7 @@ path rebased.
 - Or B3 if managed settings are available on Team.
 
 **Phase 4 — migrate + deprecate.**
-- Roll the settings-block PRs to the 6 carbonet-nano repos; verify cloud loads
+- Roll the settings-block PRs to the 6 enrolled org repos; verify cloud loads
   the plugin; then retire the file-copy bootstrap (keep `cloud-bootstrap.sh` as a
   fallback for repos that can't use plugins).
 - New ADR recording the plugin decision; update `docs/CLOUD.md`.

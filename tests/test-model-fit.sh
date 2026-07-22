@@ -73,17 +73,21 @@ extract() { # extract <cur|shape|substr...> -> assertion helper via grep
 make_rows 20 1000 20 40000 claude-opus-4-8   # gen_per_edit=50, edit_calls=20>=10
 LINE="$(bash -c "source '$LIB'; model_fit_receipt_line '$SESSION_START' '$PROJECT' '$LOG'")"
 extract "mostly mechanical editing" "$LINE" && ok "mechanical fixture -> mechanical shape" || bad "mechanical fixture: $LINE"
-extract "claude-sonnet-4-6 would" "$LINE" && ok "mechanical fixture -> recommends one tier cheaper" || bad "mechanical cheaper rec: $LINE"
+extract "claude-sonnet-5 would" "$LINE" && ok "mechanical fixture -> recommends one tier cheaper" || bad "mechanical cheaper rec: $LINE"
 extract "claude-opus-4-8" "$LINE" && ok "mechanical fixture -> names current model" || bad "mechanical current model: $LINE"
 
-make_rows 10 20000 5 5000 claude-sonnet-4-6   # gen_per_edit=2000
+make_rows 10 20000 5 5000 claude-sonnet-5   # gen_per_edit=2000
 LINE="$(bash -c "source '$LIB'; model_fit_receipt_line '$SESSION_START' '$PROJECT' '$LOG'")"
 extract "generation/reasoning-heavy" "$LINE" && ok "reasoning fixture (sonnet) -> reasoning shape" || bad "reasoning shape: $LINE"
 extract "claude-opus-4-8" "$LINE" && ok "reasoning fixture on sonnet -> suggests opus" || bad "reasoning suggest opus: $LINE"
 
-make_rows 10 20000 5 5000 claude-opus-4-8
+make_rows 10 20000 5 5000 claude-opus-4-8   # v1.5.0 ladder: fable-5 sits above opus
 LINE="$(bash -c "source '$LIB'; model_fit_receipt_line '$SESSION_START' '$PROJECT' '$LOG'")"
-extract "staying is the right call" "$LINE" && ok "reasoning fixture on opus -> stay" || bad "reasoning stay: $LINE"
+extract "claude-fable-5" "$LINE" && ok "reasoning fixture on opus -> suggests fable" || bad "reasoning suggest fable: $LINE"
+
+make_rows 10 20000 5 5000 claude-fable-5   # ceiling
+LINE="$(bash -c "source '$LIB'; model_fit_receipt_line '$SESSION_START' '$PROJECT' '$LOG'")"
+extract "staying is the right call" "$LINE" && ok "reasoning fixture on fable -> stay" || bad "reasoning stay: $LINE"
 
 make_rows 10 7000 10 5000 claude-opus-4-8   # gen_per_edit=700 (mixed band)
 LINE="$(bash -c "source '$LIB'; model_fit_receipt_line '$SESSION_START' '$PROJECT' '$LOG'")"
@@ -137,9 +141,9 @@ make_rows 10 100 20 5000 claude-haiku-4-5-20251001   # mechanical, already floor
 LINE="$(bash -c "source '$LIB'; model_fit_receipt_line '$SESSION_START' '$PROJECT' '$LOG'")"
 extract "would've been" "$LINE" && bad "mechanical on Haiku should not suggest cheaper: $LINE" || ok "mechanical on Haiku -> no cheaper suggestion (floor clamp)"
 
-make_rows 10 20000 5 5000 claude-opus-4-8   # reasoning, already ceiling
+make_rows 10 20000 5 5000 claude-fable-5   # reasoning, already ceiling (v1.5.0 ladder)
 LINE="$(bash -c "source '$LIB'; model_fit_receipt_line '$SESSION_START' '$PROJECT' '$LOG'")"
-extract "may be a better fit" "$LINE" && bad "reasoning on Opus should not suggest up: $LINE" || ok "reasoning on Opus -> no 'up' suggestion (ceiling clamp)"
+extract "may be a better fit" "$LINE" && bad "reasoning on Fable should not suggest up: $LINE" || ok "reasoning on Fable -> no 'up' suggestion (ceiling clamp)"
 
 # --- 40k-context robustness regression (blocker 1) -------------------------
 
@@ -174,7 +178,7 @@ extract "witch" "$LINE" && bad "all-subagent: should never mention switching a s
 
 make_rows 10 1000 20 40000 claude-opus-4-8
 EXPECTED_CUR="$(bash -c "source '$LIB'; loop_cost_from_usage 400000 1000 claude-opus-4-8" | awk '{printf "%.2f", $0}')"
-EXPECTED_ALT="$(bash -c "source '$LIB'; loop_cost_from_usage 400000 1000 claude-sonnet-4-6" | awk '{printf "%.2f", $0}')"
+EXPECTED_ALT="$(bash -c "source '$LIB'; loop_cost_from_usage 400000 1000 claude-sonnet-5" | awk '{printf "%.2f", $0}')"
 LINE="$(bash -c "source '$LIB'; model_fit_receipt_line '$SESSION_START' '$PROJECT' '$LOG'")"
 extract "\$$EXPECTED_CUR" "$LINE" && ok "current-model cost matches loop_cost_from_usage ($EXPECTED_CUR)" || bad "current cost mismatch: expected $EXPECTED_CUR in: $LINE"
 extract "\$$EXPECTED_ALT" "$LINE" && ok "alt-model cost matches loop_cost_from_usage ($EXPECTED_ALT)" || bad "alt cost mismatch: expected $EXPECTED_ALT in: $LINE"

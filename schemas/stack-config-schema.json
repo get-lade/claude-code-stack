@@ -151,6 +151,11 @@
         "irreversible_actions_break_loop": { "type": "boolean", "default": true }
       }
     },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,62}$",
+      "description": "M3 (ADR-034): tenant this project belongs to. Written by /project-init when a tenant pack is installed; matches tenant.json tenant_id."
+    },
     "workflow_roster": {
       "type": "string",
       "enum": ["warn", "block", "off"],

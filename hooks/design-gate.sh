@@ -34,7 +34,7 @@ FP="$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty'
 
 # Always allow docs and tests (you must be able to author the design + tests).
 case "$FP" in
-  */docs/*|docs/*|*/tests/*|tests/*) exit 0 ;;
+  */docs/*|docs/*|*/tests/*|tests/*|*/__tests__/*|__tests__/*|*.test.*|*.spec.*) exit 0 ;;
 esac
 
 # Only gate SOURCE files; allow everything else (markdown, config, data, ...).
@@ -73,14 +73,49 @@ if [[ -f "$MARKER" ]] && [[ "$(jq -r '.active // false' "$MARKER" 2>/dev/null)" 
     exit 0   # legacy session-wide approval
   fi
   # Path-scoped: allow iff FP matches an approved glob (case-statement glob match).
+  # Two silent never-match traps kept biting marker authors (SpecOps 2026-07-12):
+  #   1. bare relative globs ("lib/data/readings.ts") never match the absolute
+  #      paths hooks receive -> also try the glob with a "*/" prefix (a case
+  #      pattern's "*" crosses "/", so this matches the path at any depth).
+  #   2. "[deviceId]"-style Next.js segments are bash char classes -> escape
+  #      "[" "]" by default; set {"glob_char_classes":true} in the marker to
+  #      opt back into raw char-class matching.
+  _RAWCC="$(jq -r '.glob_char_classes // false' "$MARKER" 2>/dev/null)"
+  _ALMOST=""
   while IFS= read -r _glob; do
     [[ -z "$_glob" ]] && continue
+    _pat="$_glob"
+    if [[ "$_RAWCC" != "true" ]]; then
+      _pat="${_pat//\[/\\[}"; _pat="${_pat//\]/\\]}"
+    fi
     # shellcheck disable=SC2254
     case "$FP" in
-      $_glob) exit 0 ;;
+      $_pat) exit 0 ;;
     esac
+    if [[ "$_pat" != /* && "$_pat" != \** ]]; then
+      # shellcheck disable=SC2254
+      case "$FP" in
+        */$_pat) exit 0 ;;
+      esac
+    fi
+    # Near-miss diagnosis for the deny message: char-class opt-in is the one
+    # normalization we skip, so name the glob that would match with [ ] literal.
+    if [[ "$_RAWCC" == "true" && "$_glob" == *\[* ]]; then
+      _esc="${_glob//\[/\\[}"; _esc="${_esc//\]/\\]}"
+      # shellcheck disable=SC2254
+      case "$FP" in
+        $_esc|*/$_esc) _ALMOST="'$_glob' would match if [ ] were literal, but glob_char_classes is true" ;;
+      esac
+    fi
   done < <(jq -r '.approved_paths[]?' "$MARKER" 2>/dev/null)
-  # marker exists but no glob matched -> fall through to deny
+  # Marker active but no glob matched -> deny with a scoped diagnostic (what was
+  # tried against what) instead of the generic no-design message.
+  _GLOBS="$(jq -r '[.approved_paths[]?] | join(", ")' "$MARKER" 2>/dev/null)"
+  _WHY="design-before-code (ADR-021/023): approved design does not cover this file. target=$FP approved_paths=[$_GLOBS]."
+  [[ -n "$_ALMOST" ]] && _WHY="$_WHY Near miss: $_ALMOST."
+  _WHY="$_WHY Extend approved_paths in $MARKER — relative globs match at any depth, and [ ] are literal unless glob_char_classes=true."
+  jq -nc --arg r "$_WHY" '{hookSpecificOutput:{hookEventName:"PreToolUse", permissionDecision:"deny", permissionDecisionReason:$r}}' 2>/dev/null || true
+  exit 0
 fi
 
 # Ultracode on + source file + no approved design -> deny.

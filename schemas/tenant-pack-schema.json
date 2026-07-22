@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/bschonbrun/claude-code-stack/schemas/tenant-pack-schema.json",
+  "title": "Tenant Pack Manifest",
+  "description": "Validates tenant.json at the root of a tenant pack repo (ADR-034 §3). Consumed by install.sh --pack (landing + compose), /project-init (tenant assembly), and the provisioner. Normative documentation + pack-repo CI; runtime checks are jq-based (no schema-validator dependency).",
+  "type": "object",
+  "required": ["tenant_id", "pack_version", "github"],
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,62}$",
+      "description": "Stable tenant slug. Names the landing dir ~/.claude/packs/<tenant_id>/; written into project stack-config.json by /project-init; keys reconciler PRs."
+    },
+    "pack_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semver of this pack's content. Stamped into .pack-install.json and stack-defaults.json tenant_pack; keys reconciler PR delivery (ADR-034 §5)."
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Human-readable tenant name for banners and provisioner output."
+    },
+    "github": {
+      "type": "object",
+      "required": ["org"],
+      "description": "GitHub settings the provisioner uses when creating tenant repos.",
+      "properties": {
+        "org": {
+          "type": "string",
+          "description": "GitHub org new tenant repos are created under."
+        },
+        "merge_policy": {
+          "type": "string",
+          "enum": ["squash", "merge", "rebase"],
+          "default": "squash",
+          "description": "Merge method the provisioner configures on new repos' branch protection."
+        }
+      },
+      "additionalProperties": false
+    },
+    "database": {
+      "type": "object",
+      "description": "Tenant database defaults, consumed by /database-design and the provisioner.",
+      "properties": {
+        "default": {
+          "type": "string",
+          "enum": ["neon", "supabase"],
+          "default": "neon",
+          "description": "Default database provider for new tenant projects."
+        },
+        "supabase_conditions": {
+          "type": "string",
+          "description": "Prose: conditions under which Supabase applies instead of the default. Surfaced in the /database-design decision prompt."
+        }
+      },
+      "additionalProperties": false
+    },
+    "clerk": {
+      "type": "object",
+      "description": "Tenant Clerk auth settings, consumed by the provisioner and /clerk-auth.",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "description": "Auth strategy note consumed by /clerk-auth."
+        },
+        "publishable_key": {
+          "type": "string",
+          "pattern": "^pk_(test|live)_",
+          "description": "Clerk publishable key (publishable — allowed in a pack; secret keys are NEVER pack content, ADR-035)."
+        },
+        "org_id": {
+          "type": "string",
+          "description": "Clerk organization id the provisioner wires new apps to."
+        }
+      },
+      "additionalProperties": false
+    },
+    "deploy": {
+      "type": "object",
+      "description": "Tenant deploy defaults, consumed by the provisioner.",
+      "properties": {
+        "default": {
+          "type": "string",
+          "enum": ["cloudflare"],
+          "default": "cloudflare",
+          "description": "Deploy target. Single-value enum on purpose — widen when a second target exists."
+        },
+        "cloudflare": {
+          "type": "object",
+          "description": "Cloudflare deploy settings consumed by secret-binder (ADR-035). The Secrets Store id is deliberately NOT a field here — account id and store id are distinct 32-hex values, and the store id is always resolved live via the list-stores API.",
+          "properties": {
+            "account_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "Tenant's Cloudflare account id (NOT the Secrets Store id)."
+            },
+            "api_token_keychain_item": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "description": "macOS Keychain item name holding the tenant API token — secret-binder's local fallback when <TENANT>_API_TOKEN is not in env. Names an item, never a value."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "engine_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Tenant recommend-capabilities engine endpoint, consumed by engine hooks."
+    },
+    "design_tokens_path": {
+      "type": "string",
+      "description": "Pack-relative path to the tenant design tokens, consumed by /screenshot-diff, UI skills, and /project-init vendoring."
+    },
+    "standards": {
+      "type": "object",
+      "description": "Map of standard name to pack-relative path. NOT installed globally — /project-init vendors these into each repo as committed files (ADR-034 §4).",
+      "additionalProperties": { "type": "string" }
+    },
+    "claude_fragment_path": {
+      "type": "string",
+      "default": "CLAUDE.fragment.md",
+      "description": "Pack-relative path to the org CLAUDE.md fragment. pack-installer applies it to the global CLAUDE.md ORG_OVERLAY_MANAGED region; /project-init uses it for project CLAUDE.md assembly."
+    },
+    "gemini_generator": {
+      "type": "boolean",
+      "default": false,
+      "description": "Toggles the Gemini-powered generator skill for this tenant."
+    },
+    "secrets": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+      "uniqueItems": true,
+      "description": "Secret NAMES only, never values (ADR-034, ADR-035 §5). Provisioner resolves each name to a Cloudflare Secrets Store id and emits wrangler bindings."
+    }
+  },
+  "additionalProperties": false,
+  "if": {
+    "properties": { "secrets": { "minItems": 1 } },
+    "required": ["secrets"]
+  },
+  "then": {
+    "properties": {
+      "deploy": {
+        "properties": {
+          "cloudflare": { "required": ["account_id"] }
+        },
+        "required": ["cloudflare"]
+      }
+    },
+    "required": ["deploy"]
+  }
+}

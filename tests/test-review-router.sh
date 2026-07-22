@@ -190,6 +190,64 @@ for shell in bash zsh; do
   fi
 done
 
+# --- 12. working-tree scan: uncommitted/untracked files count toward stakes --
+# Regression for 2026-07-11: rr_classify_stakes read only the commit-range diff,
+# so reviews of uncommitted work classified "routine" against an EMPTY diff even
+# when high-stakes files (seed/migration) sat untracked in the working tree.
+
+# build_clean_repo : single commit on main, HEAD on main, nothing uncommitted —
+# so `rr_classify_stakes main HEAD` sees an empty commit-range diff.
+build_clean_repo() {
+  local R="$TMP/repo"; rm -rf "$R"; mkdir -p "$R"
+  (
+    cd "$R"
+    git init -q -b main
+    git config user.email t@t.t; git config user.name t
+    echo base > README.md
+    git add -A; git commit -qm base
+  )
+  echo "$R"
+}
+
+# 12a. the exact repro: empty range + untracked migration file -> high
+R="$(build_clean_repo)"
+mkdir -p "$R/supabase/migrations"; echo x > "$R/supabase/migrations/0009_seed.sql"
+assert_eq "empty diff + untracked migration -> high" "high" "$(classify "$R")"
+c="$( cd "$R"; bash -c "source '$LIB'; rr_classify_stakes main HEAD" )"
+case "$c" in
+  "high risk-path (uncommitted):"*) pass "reason marks the hit as uncommitted" ;;
+  *) fail "reason marks the hit as uncommitted (got '$c')" ;;
+esac
+
+# 12b. empty range + untracked ROUTINE file -> stays routine (no over-flag)
+R="$(build_clean_repo)"
+echo x > "$R/notes.md"
+assert_eq "empty diff + untracked routine file -> routine" "routine" "$(classify "$R")"
+
+# 12c. tracked high-stakes file modified but uncommitted -> high
+R="$(build_clean_repo)"
+mkdir -p "$R/src/auth"; echo v1 > "$R/src/auth/login.ts"
+( cd "$R"; git add -A; git commit -qm add-auth )
+echo v2 > "$R/src/auth/login.ts"
+assert_eq "modified tracked auth file (uncommitted) -> high" "high" "$(classify "$R")"
+
+# 12d. always-scan: routine COMMITTED diff + risky UNTRACKED file -> high
+R="$(build_repo docs/notes.md)"
+echo x > "$R/secrets_helper.ts"
+assert_eq "routine committed diff + untracked risky file -> high" "high" "$(classify "$R")"
+
+# 12e. -uall: risky file INSIDE an untracked dir must be seen (porcelain
+# without -uall collapses it to 'dir/' and the regex would miss it)
+R="$(build_clean_repo)"
+mkdir -p "$R/newmod"; echo x > "$R/newmod/payment.ts"
+assert_eq "risky file inside untracked dir -> high (-uall)" "high" "$(classify "$R")"
+
+# 12f. head != current checkout -> working tree is unrelated, NOT scanned
+R="$(build_repo docs/notes.md)"   # HEAD is on feat
+echo x > "$R/wallet_seed.ts"
+notcur="$( cd "$R"; bash -c "source '$LIB'; rr_classify_stakes main main" | awk '{print $1}' )"
+assert_eq "head != current checkout ignores working tree" "routine" "$notcur"
+
 echo "----------------------------------------"
 echo "review-router: PASS=$PASS FAIL=$FAIL"
 [[ "$FAIL" -eq 0 ]]
