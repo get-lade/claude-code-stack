@@ -97,6 +97,86 @@ merge_json() {
   mv "$tmp" "$target"
 }
 
+merge_json_pack_wins() {
+  local source="$1"   # pack file
+  local target="$2"   # installed ~/.claude file
+
+  # Sibling of merge_json with the OPPOSITE conflict winner: merge_json keeps
+  # the target (user) value on a scalar conflict; this keeps the source (pack)
+  # value (ADR-013 amendment #1, ADR-034 §2 — pack-wins compose). Do NOT call
+  # merge_json with swapped args instead: that would also invert the hook-group
+  # regroup targeting and the conflict-report semantics. Always non-interactive;
+  # every overwritten scalar path is logged to <target>.pack-overrides
+  # (path, previous, pack) — the audit trail replacing merge_json's prompt.
+  # An EXPLICIT pack null also wins (has()-based merge), so a pack can delete
+  # a value; an absent key means "no opinion" and the target survives.
+  # Callers often run this with errexit suppressed (inside `if !` chains), so
+  # every fallible step is checked explicitly — a failed jq must never leave
+  # an empty file mv'd over the target.
+
+  local overrides n
+  overrides="$(jq -n --slurpfile t "$target" --slurpfile s "$source" '
+    ($t[0]) as $tgt | ($s[0]) as $src |
+    # paths(scalars) would skip explicit-null leaves (null is falsy in jq
+    # conditionals), and a pack null is a deletion we must log.
+    [ ($src | paths(type != "object" and type != "array")) as $p
+      | select($p | all(type == "string"))
+      | ($tgt | try getpath($p) catch null) as $previous
+      | ($src | getpath($p)) as $pack
+      | select($previous != null and $previous != $pack)
+      | {path: $p, previous: $previous, pack: $pack} ]
+  ')" || return 1
+  n="$(jq 'length' <<<"$overrides")" || return 1
+
+  # Same call-by-name caveat as merge_json: bind args to $-variables up front.
+  local tmp
+  tmp="$(mktemp)" || return 1
+  if ! jq -s '
+    def dedup_stable: reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end);
+    def merge_hook_groups:
+      group_by(.matcher)
+      | map(
+          (.[0].matcher) as $m
+          | (map(.hooks // []) | add | dedup_stable) as $h
+          | if $m == null then {hooks: $h} else {matcher: $m, hooks: $h} end
+        );
+    def deep_merge(a; b):
+      a as $a | b as $b |
+      if ($a | type) == "object" and ($b | type) == "object" then
+        reduce (($a + $b) | keys[]) as $k ({};
+          .[$k] = (if ($a | has($k)) and ($b | has($k)) then deep_merge($a[$k]; $b[$k])
+                   elif ($b | has($k)) then $b[$k]
+                   else $a[$k] end))
+      elif ($a | type) == "array" and ($b | type) == "array" then
+        ($a + $b) | dedup_stable
+      else $b end;
+    deep_merge(.[0]; .[1])
+    | if (.hooks | type) == "object" then
+        .hooks |= with_entries(
+          if (.value | type) == "array" then .value |= merge_hook_groups else . end)
+      else . end
+  ' "$target" "$source" > "$tmp"; then
+    rm -f "$tmp"
+    echo "  [pack-fail] merge_json_pack_wins: jq merge failed for $target" >&2
+    return 1
+  fi
+  if ! jq -e . "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    echo "  [pack-fail] merge_json_pack_wins: merge produced invalid JSON for $target" >&2
+    return 1
+  fi
+
+  # The report reflects the CURRENT run — a converged re-run removes it.
+  if [[ "$n" -gt 0 ]]; then
+    jq '.' <<<"$overrides" > "${target}.pack-overrides" || { rm -f "$tmp"; return 1; }
+    echo "  [pack-override] $n value(s) overwritten in $(basename "$target") — see ${target}.pack-overrides" >&2
+  else
+    rm -f "${target}.pack-overrides"
+  fi
+
+  mv "$tmp" "$target" || return 1
+}
+
 append_stack_section() {
   local source="$1"
   local target="$2"
