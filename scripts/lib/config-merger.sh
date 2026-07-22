@@ -97,6 +97,65 @@ merge_json() {
   mv "$tmp" "$target"
 }
 
+merge_json_pack_wins() {
+  local source="$1"   # pack file
+  local target="$2"   # installed ~/.claude file
+
+  # Sibling of merge_json with the OPPOSITE conflict winner: merge_json keeps
+  # the target (user) value on a scalar conflict; this keeps the source (pack)
+  # value (ADR-013 amendment #1, ADR-034 §2 — pack-wins compose). Do NOT call
+  # merge_json with swapped args instead: that would also invert the hook-group
+  # regroup targeting and the conflict-report semantics. Always non-interactive;
+  # every overwritten scalar path is logged to <target>.pack-overrides
+  # (path, previous, pack) — the audit trail replacing merge_json's prompt.
+
+  local overrides n
+  overrides="$(jq -n --slurpfile t "$target" --slurpfile s "$source" '
+    ($t[0]) as $tgt | ($s[0]) as $src |
+    [ ($src | paths(scalars)) as $p
+      | select($p | all(type == "string"))
+      | ($tgt | getpath($p)) as $previous
+      | ($src | getpath($p)) as $pack
+      | select($previous != null and $pack != null and $previous != $pack)
+      | {path: $p, previous: $previous, pack: $pack} ]
+  ')"
+  n="$(jq 'length' <<<"$overrides")"
+
+  # Same call-by-name caveat as merge_json: bind args to $-variables up front.
+  local tmp
+  tmp="$(mktemp)"
+  jq -s '
+    def dedup_stable: reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end);
+    def merge_hook_groups:
+      group_by(.matcher)
+      | map(
+          (.[0].matcher) as $m
+          | (map(.hooks // []) | add | dedup_stable) as $h
+          | if $m == null then {hooks: $h} else {matcher: $m, hooks: $h} end
+        );
+    def deep_merge(a; b):
+      a as $a | b as $b |
+      if ($a | type) == "object" and ($b | type) == "object" then
+        reduce (($a + $b) | keys[]) as $k ({}; .[$k] = deep_merge($a[$k]; $b[$k]))
+      elif ($a | type) == "array" and ($b | type) == "array" then
+        ($a + $b) | dedup_stable
+      elif $b == null then $a
+      else $b end;
+    deep_merge(.[0]; .[1])
+    | if (.hooks | type) == "object" then
+        .hooks |= with_entries(
+          if (.value | type) == "array" then .value |= merge_hook_groups else . end)
+      else . end
+  ' "$target" "$source" > "$tmp"
+
+  if [[ "$n" -gt 0 ]]; then
+    jq '.' <<<"$overrides" > "${target}.pack-overrides"
+    echo "  [pack-override] $n value(s) overwritten in $(basename "$target") — see ${target}.pack-overrides" >&2
+  fi
+
+  mv "$tmp" "$target"
+}
+
 append_stack_section() {
   local source="$1"
   local target="$2"

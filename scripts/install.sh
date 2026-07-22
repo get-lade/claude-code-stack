@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Claude Code Stack — Master installer
 # Usage:
-#   ./install.sh --tier=N [--mode=merge|overwrite|fresh] [--include-ollama=laptop] [--skip-requirements]
+#   ./install.sh --tier=N [--pack=<git-url|path>[@ref]] [--mode=merge|overwrite|fresh] [--include-ollama=laptop] [--skip-requirements]
 #
 # Examples:
 #   ./install.sh --tier=0
 #   ./install.sh --tier=5 --include-ollama=laptop
 #   ./install.sh --tier=2 --mode=fresh
+#   ./install.sh --tier=4 --pack=git@github.com:CarboNet-Nano/carbonet-vibe-coding-standards.git@v1.0.0
 #
 # --skip-requirements downgrades missing-command / missing-Keychain checks to
 # warnings instead of hard failures. Intended for CI, which tests install
@@ -16,6 +17,7 @@ set -euo pipefail
 
 # Defaults
 TIER=""
+PACK_SPEC=""
 MODE="merge"
 INCLUDE_OLLAMA=""
 export SKIP_REQUIREMENTS=""
@@ -24,10 +26,11 @@ export SKIP_REQUIREMENTS=""
 for arg in "$@"; do
   case $arg in
     --tier=*) TIER="${arg#*=}" ;;
+    --pack=*) PACK_SPEC="${arg#*=}" ;;
     --mode=*) MODE="${arg#*=}" ;;
     --include-ollama=*) INCLUDE_OLLAMA="${arg#*=}" ;;
     --skip-requirements) SKIP_REQUIREMENTS="1" ;;
-    --help) echo "Usage: $0 --tier=N [--mode=merge|overwrite|fresh] [--include-ollama=laptop] [--skip-requirements]"; exit 0 ;;
+    --help) echo "Usage: $0 --tier=N [--pack=<git-url|path>[@ref]] [--mode=merge|overwrite|fresh] [--include-ollama=laptop] [--skip-requirements]"; exit 0 ;;
     *) echo "Unknown arg: $arg"; exit 1 ;;
   esac
 done
@@ -62,13 +65,15 @@ echo "==============================================="
 # Source library functions
 source "$SCRIPT_DIR/lib/tier-installer.sh"
 source "$SCRIPT_DIR/lib/config-merger.sh"
+source "$SCRIPT_DIR/lib/pack-installer.sh"
+source "$SCRIPT_DIR/lib/pack-lint.sh"
 
 # Step 1: Backup if mode != fresh (fresh handles its own backup)
 if [[ "$MODE" != "fresh" ]]; then
-  echo "[1/5] Backing up current ~/.claude/..."
+  echo "[1/6] Backing up current ~/.claude/..."
   "$SCRIPT_DIR/backup.sh"
 else
-  echo "[1/5] Fresh mode: archiving current ~/.claude/ and starting clean..."
+  echo "[1/6] Fresh mode: archiving current ~/.claude/ and starting clean..."
   if [[ -d "$CLAUDE_DIR" ]]; then
     timestamp="$(date +%Y%m%d-%H%M%S)"
     mv "$CLAUDE_DIR" "$HOME/.claude.backup.fresh-$timestamp"
@@ -78,26 +83,58 @@ else
 fi
 
 # Step 2: Install tiers 0 through TIER (cumulative)
-echo "[2/5] Installing tiers 0 through $TIER..."
+echo "[2/6] Installing tiers 0 through $TIER..."
 for ((t=0; t<=TIER; t++)); do
   echo "  Tier $t..."
   install_tier "$t" "$REPO_ROOT" "$CLAUDE_DIR" "$MODE"
 done
 
-# Step 3: Schemas (Tier 2+)
+# Step 3: Tenant pack (optional; composes over the installed core — pack-wins,
+# ADR-034). Phase-0 failure means zero writes; mid-compose failure is restored
+# from the step-1 backup.
+PACK_TENANT_ID=""
+PACK_VERSION=""
+if [[ -n "$PACK_SPEC" ]]; then
+  echo "[3/6] Installing tenant pack..."
+  resolved="$(resolve_pack_source "$PACK_SPEC")" || exit 1
+  IFS='|' read -r pack_src_dir pack_source pack_ref <<< "$resolved"
+  landing="$(land_pack "$pack_src_dir" "$CLAUDE_DIR")" || exit 1
+  [[ "$pack_src_dir" != "$PACK_SPEC" ]] && rm -rf "$pack_src_dir"
+  if ! PACK_SOURCE="$pack_source" PACK_REF="$pack_ref"       install_pack "$landing" "$CLAUDE_DIR" "$REPO_ROOT"; then
+    echo "  Pack install failed. ~/.claude was backed up in step 1 —"
+    echo "  restore with: ls -dt ~/.claude.backup* | head -1"
+    exit 1
+  fi
+  PACK_TENANT_ID="$(jq -r '.tenant_id' "$landing/tenant.json")"
+  PACK_VERSION="$(jq -r '.pack_version' "$landing/tenant.json")"
+  defaults_file="$CLAUDE_DIR/stack-defaults.json"
+  if [[ -f "$defaults_file" ]]; then
+    jq \
+      --arg tenant_id "$PACK_TENANT_ID" \
+      --arg source "$pack_source" \
+      --arg ref "$pack_ref" \
+      --arg pack_version "$PACK_VERSION" \
+      --arg path "$landing" \
+      --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      '.tenant_pack = {tenant_id:$tenant_id, source:$source, ref:$ref, pack_version:$pack_version, path:$path, installed_at:$at}' \
+      "$defaults_file" > "$defaults_file.tmp" && mv "$defaults_file.tmp" "$defaults_file"
+  fi
+fi
+
+# Step 4: Schemas (Tier 2+)
 if [[ "$TIER" -ge 2 ]]; then
-  echo "[3/5] Applying Supabase schemas..."
+  echo "[4/6] Applying Supabase schemas..."
   apply_schemas "$REPO_ROOT" "$TIER"
 fi
 
-# Step 4: Ollama (Tier 5 with --include-ollama)
+# Step 5: Ollama (Tier 5 with --include-ollama)
 if [[ "$TIER" -ge 5 ]] && [[ "$INCLUDE_OLLAMA" == "laptop" ]]; then
-  echo "[4/5] Installing Ollama..."
+  echo "[5/6] Installing Ollama..."
   install_ollama
 fi
 
-# Step 5: Verify
-echo "[5/5] Verifying installation..."
+# Step 6: Verify
+echo "[6/6] Verifying installation..."
 "$SCRIPT_DIR/verify.sh" --tier="$TIER" ${SKIP_REQUIREMENTS:+--skip-requirements}
 
 # Record an install stamp so freshness checks (lib/stack-freshness.sh, used by
@@ -114,7 +151,10 @@ if command -v jq >/dev/null 2>&1; then
     --arg branch "$source_branch" \
     --arg repo "$REPO_ROOT" \
     --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{stack_version:$ver, tier:$tier, source_sha:$sha, source_branch:$branch, source_repo:$repo, installed_at:$at}' \
+    --arg tenant_id "${PACK_TENANT_ID:-}" \
+    --arg pack_version "${PACK_VERSION:-}" \
+    '{stack_version:$ver, tier:$tier, source_sha:$sha, source_branch:$branch, source_repo:$repo, installed_at:$at}
+     + (if $tenant_id != "" then {tenant_id:$tenant_id, pack_version:$pack_version} else {} end)' \
     > "$CLAUDE_DIR/.stack-install.json"
 fi
 
