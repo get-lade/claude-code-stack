@@ -98,10 +98,26 @@ if [[ -n "$PACK_SPEC" ]]; then
   echo "[3/6] Installing tenant pack..."
   resolved="$(resolve_pack_source "$PACK_SPEC")" || exit 1
   IFS='|' read -r pack_src_dir pack_source pack_ref <<< "$resolved"
+
+  # Cloned temp dirs must not leak on any failure path below.
+  PACK_TMP_DIR=""
+  [[ "$pack_src_dir" != "$PACK_SPEC" ]] && PACK_TMP_DIR="$pack_src_dir"
+  cleanup_pack_tmp() { [[ -n "$PACK_TMP_DIR" ]] && rm -rf "$PACK_TMP_DIR"; return 0; }
+  trap cleanup_pack_tmp EXIT
+
+  # Phase 0 runs against the resolved source BEFORE landing, so a bad pack
+  # never destroys the previously-landed copy (fail closed).
+  if ! validate_pack "$pack_src_dir" "$REPO_ROOT"; then
+    echo "  Pack rejected before landing — nothing was written."
+    exit 1
+  fi
+
   landing="$(land_pack "$pack_src_dir" "$CLAUDE_DIR")" || exit 1
-  [[ "$pack_src_dir" != "$PACK_SPEC" ]] && rm -rf "$pack_src_dir"
-  if ! PACK_SOURCE="$pack_source" PACK_REF="$pack_ref"       install_pack "$landing" "$CLAUDE_DIR" "$REPO_ROOT"; then
-    echo "  Pack install failed. ~/.claude was backed up in step 1 —"
+  cleanup_pack_tmp; PACK_TMP_DIR=""; trap - EXIT
+
+  if ! PACK_SOURCE="$pack_source" PACK_REF="$pack_ref" \
+      install_pack "$landing" "$CLAUDE_DIR" "$REPO_ROOT"; then
+    echo "  Pack compose failed. ~/.claude was backed up in step 1 —"
     echo "  restore with: ls -dt ~/.claude.backup* | head -1"
     exit 1
   fi
@@ -109,7 +125,7 @@ if [[ -n "$PACK_SPEC" ]]; then
   PACK_VERSION="$(jq -r '.pack_version' "$landing/tenant.json")"
   defaults_file="$CLAUDE_DIR/stack-defaults.json"
   if [[ -f "$defaults_file" ]]; then
-    jq \
+    if ! jq \
       --arg tenant_id "$PACK_TENANT_ID" \
       --arg source "$pack_source" \
       --arg ref "$pack_ref" \
@@ -117,7 +133,12 @@ if [[ -n "$PACK_SPEC" ]]; then
       --arg path "$landing" \
       --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       '.tenant_pack = {tenant_id:$tenant_id, source:$source, ref:$ref, pack_version:$pack_version, path:$path, installed_at:$at}' \
-      "$defaults_file" > "$defaults_file.tmp" && mv "$defaults_file.tmp" "$defaults_file"
+      "$defaults_file" > "$defaults_file.tmp"; then
+      rm -f "$defaults_file.tmp"
+      echo "  Error: failed to record tenant_pack in stack-defaults.json"
+      exit 1
+    fi
+    mv "$defaults_file.tmp" "$defaults_file"
   fi
 fi
 
@@ -144,6 +165,12 @@ if command -v jq >/dev/null 2>&1; then
   source_sha="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "")"
   source_branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
   stack_version="$(jq -r '.stack_version // "unknown"' "$REPO_ROOT/templates/stack-defaults.template.json" 2>/dev/null || echo "unknown")"
+  # A core-only re-install (no --pack) must not wipe the recorded pack
+  # identity — carry tenant_id/pack_version forward from the prior stamp.
+  if [[ -z "$PACK_TENANT_ID" && -f "$CLAUDE_DIR/.stack-install.json" ]]; then
+    PACK_TENANT_ID="$(jq -r '.tenant_id // empty' "$CLAUDE_DIR/.stack-install.json" 2>/dev/null || echo "")"
+    PACK_VERSION="$(jq -r '.pack_version // empty' "$CLAUDE_DIR/.stack-install.json" 2>/dev/null || echo "")"
+  fi
   jq -n \
     --arg ver "$stack_version" \
     --argjson tier "$TIER" \

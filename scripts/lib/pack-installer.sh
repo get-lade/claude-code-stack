@@ -2,12 +2,17 @@
 # Tenant-pack install logic (M3, ADR-034). Sourced by install.sh.
 # Requires config-merger.sh (merge_json_pack_wins) and pack-lint.sh
 # (lint_pack_deltas) to be sourced alongside.
+#
+# Callers run these functions with errexit suppressed (`if ! install_pack`),
+# so every fallible step is checked explicitly — never rely on set -e here.
 
 # Splits an optional @ref off a git pack spec: echoes "<url>|<ref>".
 # The ref is split from the RIGHT, only when the suffix contains no "/" and,
 # for scp-style git@host:org/repo.git@v1, at least one "@" remains in the URL
 # part. Ref must match ^[A-Za-z0-9._-]+$. Do not "simplify" the right-split
-# rule — it is what keeps git@host:org/repo.git (no ref) intact.
+# rule — it is what keeps git@host:org/repo.git (no ref) intact. Known limit
+# (accepted, plan §6.4): slash refs like feat/x cannot be expressed — they are
+# indistinguishable from the URL tail; use a tag or simple branch name.
 parse_pack_ref() {
   local spec="$1"
   local url="$spec" ref=""
@@ -23,13 +28,27 @@ parse_pack_ref() {
   echo "$url|$ref"
 }
 
+# Strips userinfo (user:token@) out of an https URL so credential-bearing
+# specs are never logged or persisted to stamps/defaults.
+sanitize_pack_source() {
+  local url="$1"
+  if [[ "$url" == https://*@* ]]; then
+    echo "https://${url#https://*@}"
+  else
+    echo "$url"
+  fi
+}
+
 # Parses a --pack spec into "<local_dir>|<source>|<ref>" on stdout.
-# Existing directory -> local path mode (no clone). Otherwise git mode:
-# @ref is split from the RIGHT, only when the suffix contains no "/" and,
-# for scp-style git@host:org/repo.git@v1, at least one "@" remains in the
-# URL part. Clone lands in a mktemp dir the caller owns.
+# Existing directory -> local path mode (no clone). Otherwise git mode; the
+# clone lands in a mktemp dir the caller owns (and must clean up).
 resolve_pack_source() {
   local spec="$1"
+
+  if [[ "$spec" == -* ]]; then
+    echo "  [pack-fail] Pack spec may not start with '-': $spec" >&2
+    return 1
+  fi
 
   if [[ -d "$spec" ]]; then
     echo "$spec|$spec|"
@@ -40,59 +59,40 @@ resolve_pack_source() {
   IFS='|' read -r url ref <<< "$(parse_pack_ref "$spec")"
 
   local clone_dir
-  clone_dir="$(mktemp -d)"
+  clone_dir="$(mktemp -d)" || return 1
 
   local -a git_args=(clone --depth 1)
   [[ -n "$ref" ]] && git_args+=(--branch "$ref")
 
+  # Token goes through GIT_CONFIG_* env vars, never argv (invisible to ps /
+  # xtrace) and never interpolated into a logged URL (ADR-034 §1).
   local token="${CLAUDE_STACK_PACK_TOKEN:-${CLAUDE_STACK_REPO_TOKEN:-}}"
+  local -a auth_env=()
   if [[ -n "$token" && "$url" == https://* ]]; then
-    # Token via extraheader, never interpolated into a logged URL (ADR-034 §1).
     local b64
     b64="$(printf 'x-access-token:%s' "$token" | base64 | tr -d '\n')"
-    git_args=(-c "http.extraheader=Authorization: basic $b64" "${git_args[@]}")
+    auth_env=(GIT_CONFIG_COUNT=1
+      GIT_CONFIG_KEY_0=http.extraheader
+      "GIT_CONFIG_VALUE_0=Authorization: basic $b64")
   fi
 
-  if ! GIT_TERMINAL_PROMPT=0 git "${git_args[@]}" "$url" "$clone_dir" >/dev/null 2>&1; then
+  if ! env GIT_TERMINAL_PROMPT=0 "${auth_env[@]}" \
+      git "${git_args[@]}" -- "$url" "$clone_dir" >/dev/null 2>&1; then
     rm -rf "$clone_dir"
-    echo "  [pack-fail] Could not clone $url${ref:+ @$ref}" >&2
+    echo "  [pack-fail] Could not clone $(sanitize_pack_source "$url")${ref:+ @$ref}" >&2
     return 1
   fi
 
-  echo "$clone_dir|$url|$ref"
+  echo "$clone_dir|$(sanitize_pack_source "$url")|$ref"
 }
 
-# Copies a resolved pack into its durable home ~/.claude/packs/<tenant_id>/
-# (.git/ retained for future ref updates). tenant_id is read and validated
-# BEFORE landing — that is what makes the landing path trustworthy.
-# Echoes the landing dir.
-land_pack() {
-  local src_dir="$1"
-  local claude_dir="$2"
-
-  local tenant_id
-  tenant_id="$(jq -r '.tenant_id // empty' "$src_dir/tenant.json" 2>/dev/null)" || tenant_id=""
-  if [[ ! "$tenant_id" =~ ^[a-z][a-z0-9-]{1,62}$ ]]; then
-    echo "  [pack-fail] tenant.json missing or tenant_id invalid" >&2
-    return 1
-  fi
-
-  local landing="$claude_dir/packs/$tenant_id"
-  mkdir -p "$landing"
-  rsync -a --delete "$src_dir/" "$landing/"
-  echo "$landing"
-}
-
-# install_pack <pack_dir> <claude_dir> <core_repo_root>
-# Phase 0 validates (fail closed, zero writes), Phase 1 composes the pack
-# over the installed core with pack-wins semantics (ADR-034 §2).
-# Optional env for the success stamp: PACK_SOURCE, PACK_REF.
-install_pack() {
+# Phase 0 — validates a pack WITHOUT writing anything. Run this against the
+# resolved source (temp clone or local dir) BEFORE land_pack, so a bad pack
+# can never destroy the previously-landed copy (fail closed, zero writes).
+validate_pack() {
   local pack_dir="$1"
-  local claude_dir="$2"
-  local core_repo_root="$3"
+  local core_repo_root="$2"
 
-  # ---- Phase 0: validate, then apply (zero writes on failure) ----
   if ! jq -e . "$pack_dir/tenant.json" >/dev/null 2>&1; then
     echo "  [pack-fail] tenant.json missing or unparseable" >&2
     return 1
@@ -108,6 +108,36 @@ install_pack() {
     ' "$pack_dir/tenant.json" >/dev/null 2>&1; then
     echo "  [pack-fail] tenant.json invalid: requires tenant_id (^[a-z][a-z0-9-]{1,62}\$), pack_version (semver), github.org; secrets must be UPPER_SNAKE names" >&2
     return 1
+  fi
+
+  # claude_fragment_path must stay inside the pack: no absolute paths, no
+  # traversal, no symlink escaping — otherwise a pack could pull arbitrary
+  # local files into ~/.claude/CLAUDE.md.
+  local fragment_rel
+  fragment_rel="$(jq -r '.claude_fragment_path // "CLAUDE.fragment.md"' "$pack_dir/tenant.json")" || return 1
+  if [[ "$fragment_rel" == /* || "$fragment_rel" == *..* ]]; then
+    echo "  [pack-fail] claude_fragment_path must be a relative path inside the pack: $fragment_rel" >&2
+    return 1
+  fi
+  if [[ -e "$pack_dir/$fragment_rel" ]]; then
+    local pack_real frag_real
+    pack_real="$(cd "$pack_dir" && pwd -P)" || return 1
+    frag_real="$(cd "$(dirname "$pack_dir/$fragment_rel")" 2>/dev/null && pwd -P)/$(basename "$fragment_rel")" || return 1
+    if [[ -L "$pack_dir/$fragment_rel" || "$frag_real" != "$pack_real/"* ]]; then
+      echo "  [pack-fail] claude_fragment_path escapes the pack (symlink or traversal): $fragment_rel" >&2
+      return 1
+    fi
+  fi
+
+  # Every mergeable pack JSON must parse before any compose step runs.
+  if [[ -d "$pack_dir/config" ]]; then
+    local pack_file
+    while IFS= read -r -d '' pack_file; do
+      if ! jq -e . "$pack_file" >/dev/null 2>&1; then
+        echo "  [pack-fail] invalid JSON in pack: ${pack_file#"$pack_dir"/}" >&2
+        return 1
+      fi
+    done < <(find "$pack_dir/config" -type f -name '*.json' -print0)
   fi
 
   if ! lint_pack_deltas "$pack_dir" "$core_repo_root"; then
@@ -126,49 +156,83 @@ install_pack() {
     return 1
   fi
 
-  # ---- Phase 1: compose, type-dispatched ----
+  return 0
+}
+
+# Copies a validated pack into its durable home ~/.claude/packs/<tenant_id>/
+# (.git/ retained for future ref updates). Callers MUST validate_pack the
+# source first — the rsync --delete below replaces the previous landed copy.
+# Echoes the landing dir.
+land_pack() {
+  local src_dir="$1"
+  local claude_dir="$2"
+
+  local tenant_id
+  tenant_id="$(jq -r '.tenant_id // empty' "$src_dir/tenant.json" 2>/dev/null)" || tenant_id=""
+  if [[ ! "$tenant_id" =~ ^[a-z][a-z0-9-]{1,62}$ ]]; then
+    echo "  [pack-fail] tenant.json missing or tenant_id invalid" >&2
+    return 1
+  fi
+
+  local landing="$claude_dir/packs/$tenant_id"
+  mkdir -p "$landing" || return 1
+  rsync -a --delete "$src_dir/" "$landing/" || return 1
+  echo "$landing"
+}
+
+# install_pack <pack_dir> <claude_dir> <core_repo_root>
+# Re-runs Phase 0 (validate_pack — cheap, keeps direct callers fail-closed),
+# then composes the pack over the installed core with pack-wins semantics
+# (ADR-034 §2). Dispatch is by the convention layout (plan §2): config/**/
+# *.json merge pack-wins; skills/agents/commands are whole-file payloads
+# (including any non-.md files inside them — a replaced skill replaces
+# wholesale); standards/ and design/ are consumed later from the landed copy.
+# Optional env for the success stamp: PACK_SOURCE, PACK_REF.
+install_pack() {
+  local pack_dir="$1"
+  local claude_dir="$2"
+  local core_repo_root="$3"
+
+  validate_pack "$pack_dir" "$core_repo_root" || return 1
+
   local tenant_id pack_version
-  tenant_id="$(jq -r '.tenant_id' "$pack_dir/tenant.json")"
-  pack_version="$(jq -r '.pack_version' "$pack_dir/tenant.json")"
+  tenant_id="$(jq -r '.tenant_id' "$pack_dir/tenant.json")" || return 1
+  pack_version="$(jq -r '.pack_version' "$pack_dir/tenant.json")" || return 1
 
   if [[ -d "$pack_dir/config" ]]; then
     local pack_file rel dest
-    while IFS= read -r pack_file; do
+    while IFS= read -r -d '' pack_file; do
       rel="${pack_file#"$pack_dir"/config/}"
       dest="$claude_dir/$rel"
-      mkdir -p "$(dirname "$dest")"
+      mkdir -p "$(dirname "$dest")" || return 1
       if [[ -f "$dest" ]]; then
-        merge_json_pack_wins "$pack_file" "$dest"
+        merge_json_pack_wins "$pack_file" "$dest" || return 1
         echo "    [pack-merge] $dest"
       else
-        cp "$pack_file" "$dest"
+        cp "$pack_file" "$dest" || return 1
         echo "    [pack-copy] $dest"
       fi
-    done < <(find "$pack_dir/config" -type f -name '*.json')
+    done < <(find "$pack_dir/config" -type f -name '*.json' -print0)
   fi
 
   local fragment_rel
-  fragment_rel="$(jq -r '.claude_fragment_path // "CLAUDE.fragment.md"' "$pack_dir/tenant.json")"
+  fragment_rel="$(jq -r '.claude_fragment_path // "CLAUDE.fragment.md"' "$pack_dir/tenant.json")" || return 1
   if [[ -f "$pack_dir/$fragment_rel" ]]; then
-    touch "$claude_dir/CLAUDE.md"
-    apply_org_overlay_section "$pack_dir/$fragment_rel" "$claude_dir/CLAUDE.md"
+    touch "$claude_dir/CLAUDE.md" || return 1
+    apply_org_overlay_section "$pack_dir/$fragment_rel" "$claude_dir/CLAUDE.md" || return 1
     echo "    [pack-overlay] $claude_dir/CLAUDE.md"
   fi
 
-  # skills/agents/commands: whole-file replace/add. standards/, design/ and
-  # tenant.json are consumed later from ~/.claude/packs/<tenant_id>/ by
-  # /project-init and the provisioner — never installed globally.
-  local md_root
+  local md_root f
   for md_root in skills agents commands; do
     [[ -d "$pack_dir/$md_root" ]] || continue
-    local f rel dest
-    while IFS= read -r f; do
+    while IFS= read -r -d '' f; do
       rel="${f#"$pack_dir"/}"
       dest="$claude_dir/$rel"
-      mkdir -p "$(dirname "$dest")"
-      cp "$f" "$dest"
+      mkdir -p "$(dirname "$dest")" || return 1
+      cp "$f" "$dest" || return 1
       echo "    [pack-copy] $dest"
-    done < <(find "$pack_dir/$md_root" -type f)
+    done < <(find "$pack_dir/$md_root" -type f -print0)
   done
 
   local sha
@@ -176,12 +240,12 @@ install_pack() {
   jq -n \
     --arg tenant_id "$tenant_id" \
     --arg pack_version "$pack_version" \
-    --arg source "${PACK_SOURCE:-$pack_dir}" \
+    --arg source "$(sanitize_pack_source "${PACK_SOURCE:-$pack_dir}")" \
     --arg ref "${PACK_REF:-}" \
     --arg sha "$sha" \
     --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{tenant_id:$tenant_id, pack_version:$pack_version, source:$source, ref:$ref, sha:$sha, installed_at:$at}' \
-    > "$pack_dir/.pack-install.json"
+    > "$pack_dir/.pack-install.json" || return 1
 
   echo "  Pack $tenant_id@$pack_version composed over core."
 }
@@ -197,19 +261,26 @@ apply_org_overlay_section() {
   local end_marker="<!-- /ORG_OVERLAY_MANAGED -->"
 
   if grep -q "$marker" "$target" 2>/dev/null; then
+    # A start marker without its end marker would truncate the rest of the
+    # file in the replace pass — refuse instead.
+    if ! grep -q "$end_marker" "$target"; then
+      echo "  [pack-fail] $target has an unclosed ORG_OVERLAY_MANAGED region" >&2
+      return 1
+    fi
     awk -v source="$source" -v marker="$marker" -v end_marker="$end_marker" '
       BEGIN { in_section = 0 }
-      index($0, marker) && !index($0, end_marker) { in_section = 1; print; while ((getline line < source) > 0) print line; next }
       index($0, end_marker) { in_section = 0; print; next }
+      index($0, marker) { in_section = 1; print; while ((getline line < source) > 0) print line; next }
       !in_section { print }
-    ' "$target" > "$target.new"
-    mv "$target.new" "$target"
+    ' "$target" > "$target.new" || return 1
+    mv "$target.new" "$target" || return 1
   else
     {
       echo ""
       echo "$marker"
       cat "$source"
+      [[ -n "$(tail -c1 "$source")" ]] && echo ""
       echo "$end_marker"
-    } >> "$target"
+    } >> "$target" || return 1
   fi
 }

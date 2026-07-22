@@ -171,6 +171,12 @@ if [[ -e "$CLAUDE/standards" ]]; then
   exit 1
 fi
 
+# 7c. Converged re-run removes the now-stale .pack-overrides report
+if [[ -e "$CLAUDE/settings.json.pack-overrides" ]]; then
+  echo "FAIL: converged run left a stale pack-overrides report"
+  exit 1
+fi
+
 # 8. Idempotency — a second run converges (recursive diff empty)
 SNAP="$TMP/snap"
 cp -R "$CLAUDE" "$SNAP"
@@ -237,6 +243,92 @@ fi
 if ! jq -e '.tenant_id == "carbonet" and .pack_version == "1.2.0"' \
   "$PACK/.pack-install.json" > /dev/null; then
   echo "FAIL: .pack-install.json stamp missing or wrong"
+  exit 1
+fi
+
+# 14. Merge edges: explicit pack null wins (and is logged); mixed-type
+# prefix must not crash the override audit
+cat > "$TMP/edge-target.json" << 'EOF'
+{ "kill_me": "alive", "a": "scalar-here" }
+EOF
+cat > "$TMP/edge-source.json" << 'EOF'
+{ "kill_me": null, "a": { "b": "nested" } }
+EOF
+if ! merge_json_pack_wins "$TMP/edge-source.json" "$TMP/edge-target.json" 2>/dev/null; then
+  echo "FAIL: merge crashed on null/mixed-type edges"
+  exit 1
+fi
+if ! jq -e '.kill_me == null and .a.b == "nested"' "$TMP/edge-target.json" > /dev/null; then
+  echo "FAIL: explicit pack null or mixed-type replacement did not win"
+  exit 1
+fi
+if ! jq -e 'any(.[]; .path == ["kill_me"] and .pack == null)' \
+  "$TMP/edge-target.json.pack-overrides" > /dev/null 2>&1; then
+  echo "FAIL: null-deletion not logged in pack-overrides"
+  exit 1
+fi
+
+# 15. Absent key means no opinion — target value survives
+cat > "$TMP/absent-target.json" << 'EOF'
+{ "mine": "kept" }
+EOF
+cat > "$TMP/absent-source.json" << 'EOF'
+{ "other": 1 }
+EOF
+merge_json_pack_wins "$TMP/absent-source.json" "$TMP/absent-target.json"
+if ! jq -e '.mine == "kept" and .other == 1' "$TMP/absent-target.json" > /dev/null; then
+  echo "FAIL: absent pack key overwrote target"
+  exit 1
+fi
+
+# 16. claude_fragment_path traversal / absolute paths rejected
+TRAV="$TMP/trav"
+cp -R "$PACK" "$TRAV"
+jq '.claude_fragment_path = "../outside.md"' "$TRAV/tenant.json" > "$TRAV/tenant.json.tmp" && mv "$TRAV/tenant.json.tmp" "$TRAV/tenant.json"
+if validate_pack "$TRAV" "$CORE" > /dev/null 2>&1; then
+  echo "FAIL: traversal claude_fragment_path accepted"
+  exit 1
+fi
+jq '.claude_fragment_path = "/etc/hosts"' "$TRAV/tenant.json" > "$TRAV/tenant.json.tmp" && mv "$TRAV/tenant.json.tmp" "$TRAV/tenant.json"
+if validate_pack "$TRAV" "$CORE" > /dev/null 2>&1; then
+  echo "FAIL: absolute claude_fragment_path accepted"
+  exit 1
+fi
+
+# 17. Invalid JSON under config/ rejected in Phase 0
+BADJSON="$TMP/badjson"
+cp -R "$PACK" "$BADJSON"
+echo '{ not json' > "$BADJSON/config/broken.json"
+if validate_pack "$BADJSON" "$CORE" > /dev/null 2>&1; then
+  echo "FAIL: malformed config JSON accepted"
+  exit 1
+fi
+
+# 18. Leading-dash pack spec rejected (git option injection)
+if resolve_pack_source "--upload-pack=evil" > /dev/null 2>&1; then
+  echo "FAIL: leading-dash pack spec accepted"
+  exit 1
+fi
+
+# 19. Credential-bearing URLs are sanitized before logging/persisting
+if [[ "$(sanitize_pack_source "https://user:tok@host/org/repo.git")" != "https://host/org/repo.git" ]]; then
+  echo "FAIL: sanitize_pack_source left credentials in URL"
+  exit 1
+fi
+
+# 20. Unclosed overlay region fails instead of truncating the file
+cat > "$TMP/unclosed.md" << 'EOF'
+# Doc
+<!-- ORG_OVERLAY_MANAGED -->
+orphan region with no end marker
+EOF
+echo "new content" > "$TMP/frag.md"
+if apply_org_overlay_section "$TMP/frag.md" "$TMP/unclosed.md" > /dev/null 2>&1; then
+  echo "FAIL: unclosed overlay region did not fail"
+  exit 1
+fi
+if ! grep -q "orphan region" "$TMP/unclosed.md"; then
+  echo "FAIL: unclosed-region failure still mutated the file"
   exit 1
 fi
 
