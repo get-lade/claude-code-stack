@@ -19,8 +19,8 @@ provisioner validates each name against the live store before binding.
 - All tenant secret names follow the `<TENANT>_*` prefix convention.
 - Deploy runs via Wrangler (locally from /publish, or from a Pipedream code step per
   `docs/plans/2026-07-21-cloudflare-deploy-via-pipedream.md`).
-- UNCERTAIN: Pages Functions support for `[[secrets_store_secrets]]` in wrangler
-  config (see Open questions #2). Workers support is confirmed.
+- RESOLVED 2026-07-22: Pages Functions do NOT support `[[secrets_store_secrets]]`
+  — Workers-only (see Open questions #2). Hosting leans Workers + static assets.
 
 ## 1. Interface / contract
 
@@ -170,15 +170,16 @@ mock the API by overriding the curl wrapper function / `CF_API_BASE` to serve fi
    Pipedream secret, Claude cloud = environment env var. Three copies of
    `<TENANT>_API_TOKEN` to keep in sync on rotation; no reconciler yet. Accepted
    for M-scale; revisit when the lade SaaS control plane exists.
-2. **Wrangler / Pages support (UNVERIFIED).** `[[secrets_store_secrets]]`
-   (`binding`/`store_id`/`secret_name`) is confirmed for Workers on current
-   wrangler v4; Pages Functions wrangler-config support could not be confirmed
-   (Pages config generally requires wrangler ≥3.45 + V2 build system, and new
-   binding types land Workers-first). MUST spike before implementation: if Pages
-   lacks the binding, the hosting decision moves to **Workers with static assets**
-   — flag to the engine plan's open "Pages vs Workers" item rather than deciding
-   here. Pin the minimum wrangler version in the requirements check
-   (tier-installer `command` requirement pattern) once spiked.
+2. **Wrangler / Pages support — RESOLVED (spiked 2026-07-22).** Pages Functions
+   do **not** support `[[secrets_store_secrets]]`. The Pages bindings docs
+   (developers.cloudflare.com/pages/functions/bindings/) list only KV, Durable
+   Objects, R2, D1, Vectorize, Workers AI, service bindings, queue producers,
+   Hyperdrive, Analytics Engine, env vars, and plain per-project secrets —
+   Secrets Store is absent, and the docs note Pages "only support a subset of
+   all bindings." Secrets Store bindings are Workers-only. Consequence: the
+   hosting decision moves to **Workers with static assets** — flagged to the
+   engine plan's open "Pages vs Workers" item. Binder targets Workers wrangler
+   config only; no Pages code path needed.
 3. **Secrets Store is beta-era.** API shapes (esp. pagination envelope) may drift;
    the curl wrapper isolates the API surface to one function.
 4. **Store multiplicity.** Plan assumes one store per account; a second store makes
