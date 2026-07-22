@@ -79,7 +79,14 @@ Pages/Workers, R2 for storage). Options weighed:
 | Tenant   | CF account id                      | Secrets Store id                     |
 |----------|------------------------------------|--------------------------------------|
 | CarboNet | `c5cbef0790a4fe5ee0261e5307dd3859` | `cc2d18ce6031458697161aa9b6e84a89` (`default_secrets_store`) |
-| lade     | `14145bea73964663895df1a595bdc824` | _(default store; resolve via list API)_ |
+| lade     | `0345fec753a46d6139ebfb504cf23e8c` | `14145bea73964663895df1a595bdc824`   |
 
 Each tenant store holds `<TENANT>_API_TOKEN`, `<TENANT>_ACCESS_KEY_ID`,
 `<TENANT>_SECRET_ACCESS_KEY`, `<TENANT>_S3_API_ENDPOINT`, all Workers-scoped, Active.
+
+**Watch out — account id ≠ store id.** They are distinct 32-hex strings. The token
+summary screen shows the token's account id ("Entire `<id>` account"); the Secrets Store
+page shows the store id. Pointing an API call at the store id in the `accounts/{id}` slot
+returns a misleading `10000 Authentication error` (not a 404), even with a valid,
+correctly-scoped token. Resolve the store id per account via the list-stores API rather
+than assuming it.
