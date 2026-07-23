@@ -60,7 +60,7 @@ managed marker region (same idempotent pattern as `append_stack_section` in
     # STACK_SECRETS_MANAGED
     [[secrets_store_secrets]]
     binding = "CARBONET_API_TOKEN"
-    store_id = "cc2d18ce6031458697161aa9b6e84a89"
+    store_id = "c0000000000000000000000000000002"
     secret_name = "CARBONET_API_TOKEN"
     # /STACK_SECRETS_MANAGED
 
@@ -161,7 +161,7 @@ mock the API by overriding the curl wrapper function / `CF_API_BASE` to serve fi
       "secret value" planted in fixtures → zero hits.
 - [ ] LIVE smoke (opt-in, `RUN_LIVE_CF_SMOKE=1`, needs `CARBONET_API_TOKEN` in env):
       resolve CarboNet store id from account `c5cbef…`, expect
-      `cc2d18ce6031458697161aa9b6e84a89`; list resolves all 4 `CARBONET_*` names;
+      `c0000000000000000000000000000002`; list resolves all 4 `CARBONET_*` names;
       read-only — creates/binds nothing.
 
 ## 6. Open questions / risks
