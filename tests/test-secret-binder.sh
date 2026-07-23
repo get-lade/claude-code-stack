@@ -12,8 +12,11 @@ source "$REPO_ROOT/scripts/lib/secret-binder.sh"
 TMP="$(mktemp -d)"
 trap "rm -rf '$TMP'" EXIT
 
-STORE_ID="cc2d18ce6031458697161aa9b6e84a89"
-ACCOUNT_ID="c5cbef0790a4fe5ee0261e5307dd3859"
+# Synthetic 32-hex fixtures — must match ^[0-9a-f]{32}$ (the store-id shape
+# check) but must NEVER be real Cloudflare account/store ids (they don't
+# leave the mock CF API below, which treats them as opaque strings).
+STORE_ID="cafebabecafebabecafebabecafebabe"
+ACCOUNT_ID="deadbeefdeadbeefdeadbeefdeadbeef"
 # Planted sentinel: a "secret value" that must NEVER surface in any output.
 SENTINEL="sv_PLAINTEXT_SENTINEL_do_not_leak"
 
@@ -263,7 +266,21 @@ if [[ "$BASE_CHECK" != "https://api.cloudflare.com/client/v4" ]]; then
   exit 1
 fi
 
-# 16. LIVE smoke (opt-in): read-only against the CarboNet store
+# 16. Missing .secrets key entirely (not null, not [] — the key absent) must
+# fail closed, same as malformed .secrets (case 10) — a dropped key must not
+# silently deploy with zero bindings (security fix: (.secrets // []) treated
+# missing/null identically to an explicit []).
+jq 'del(.secrets)' "$TMP/tenant.json" > "$TMP/t16.json"
+if bind_tenant_secrets "$TMP/t16.json" "$TMP/w16.toml" > /dev/null 2>&1; then
+  echo "FAIL: tenant.json with no .secrets key was treated as a no-op success"
+  exit 1
+fi
+if [[ -s "$TMP/w16.toml" ]]; then
+  echo "FAIL: missing .secrets key still wrote TOML"
+  exit 1
+fi
+
+# 17. LIVE smoke (opt-in): read-only against the CarboNet store
 if [[ -n "${RUN_LIVE_CF_SMOKE:-}" ]]; then
   if [[ -z "${CARBONET_API_TOKEN:-}" || "$CARBONET_API_TOKEN" == "$SENTINEL" ]]; then
     echo "SKIP live smoke: real CARBONET_API_TOKEN not in env"
