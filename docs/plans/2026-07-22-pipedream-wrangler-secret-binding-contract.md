@@ -80,6 +80,17 @@ container image at build time). **It must never be copied into, or shipped
 as part of, a client/tenant app repo** — clients receive only the deployed
 app bundle (ADR-036 §1), never stack lib code.
 
+> **SUPERSEDED (2026-07-23, engine ADR-065).** §5's "one process" rule below
+> was a Pipedream-UI artifact. The engine builds no Pipedream workflows, and a
+> single bash process leaks the token: `unset` does not scrub the process's own
+> `/proc/<pid>/environ`, so a tenant build spawned by `wrangler deploy` under
+> the same UID can recover it. The rule is replaced by: **a TS orchestrator runs
+> two separate `execFile` children — bind (token in env), then `wrangler deploy`
+> (scrubbed env), invoked only if bind resolved.** The guarantee ("bind failure
+> hard-aborts deploy") is preserved by promise-rejection, not by shared process.
+> The rest of this doc (token source, arg materialization, review checklist)
+> still stands. See `Architect-for-Claude-Code/docs/ADRs/065-*.md`.
+
 ## 5. Same-process rule — the load-bearing constraint
 
 `bind_tenant_secrets` and `wrangler deploy` **must execute in the same shell
