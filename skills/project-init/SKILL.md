@@ -5,7 +5,7 @@ description: Initialize a project for use with the Claude Code Stack. Asks which
 
 # /project-init
 
-Two-mode project initialization. v1.2.
+Two-mode project initialization. v1.3 (tenant-pack aware, ADR-034 §4).
 
 ## Steps
 
@@ -72,6 +72,32 @@ the repo.
 
 If the discovery surfaces a prior handoff or in-flight work, mention it
 explicitly so the user knows nothing was lost.
+
+**1c. Tenant-pack detection (M3, ADR-034 §4)**
+
+If a tenant pack was installed globally (`install.sh --pack`), this project
+should be initialized tenant-aware: stamped with the `tenant_id`, its CLAUDE.md
+carrying the pack's org fragment, and the pack's `standards/` vendored in.
+
+The helper `scripts/lib/project-pack-vendor.sh` is **bash** and sources
+`pack-installer.sh` — sourcing it under the interactive **zsh** session shell
+fails (a misleading `curl`/function error). Run every call below inside a single
+`bash -c` block, never `source` it into the current shell.
+
+Detect the pack (read-only) with:
+```
+bash -c 'source "<stack_repo>/scripts/lib/config-merger.sh"
+         source "<stack_repo>/scripts/lib/pack-lint.sh"
+         source "<stack_repo>/scripts/lib/project-pack-vendor.sh"
+         resolve_installed_pack "$HOME/.claude"'
+```
+(`<stack_repo>` is `~/.claude/.stack-install.json` → `source_repo`.)
+- **Nonzero / empty output** — no valid pack. This is the normal single-tenant
+  case: continue with today's tenant-less behavior, skip the pack steps in 5 + 6.
+- **`<tenant_id>|<pack_dir>`** — a pack is active. Note the `tenant_id` and
+  `pack_dir`; surface it in the discovery summary ("Tenant pack: `acme` — will
+  stamp tenant_id, apply org CLAUDE fragment, vendor standards/"). Use them in
+  steps 5 and 6.
 
 ### 2. Ask which mode
 Print:
@@ -155,6 +181,18 @@ Then ask: "Should this also become your default for new projects?"
 }
 ```
 
+**Tenant pack active (from step 1c) — stamp the `tenant_id`.** If 1c resolved a
+pack, add `"tenant_id": "<tenant_id>"` to the JSON above (top level, after
+`purpose`). If you are updating an existing config rather than writing fresh,
+set it with the helper instead of hand-editing:
+```
+bash -c 'source "<stack_repo>/scripts/lib/config-merger.sh"
+         source "<stack_repo>/scripts/lib/pack-lint.sh"
+         source "<stack_repo>/scripts/lib/project-pack-vendor.sh"
+         set_config_tenant_id ".claude/stack-config.json" "<tenant_id>" "$PWD"'
+```
+No pack → omit the field entirely (do not write `"tenant_id": null`).
+
 **Tier ≥ 2 only — append a `loop_policy` block.** The base JSON above is
 tier-agnostic. For Tier 0/1, write it as-is (no `loop_policy`). For **Tier ≥ 2**
 (the tier that installs the loop Stop-hook + `/loop-engineer`), insert this block
@@ -222,6 +260,32 @@ the repo name, tier, and one-line purpose from the answers above. Leave the
 `<...>` placeholder sections for the user to complete. If a `CLAUDE.md`
 already exists, do not overwrite it — note that it should be reconciled with
 the template by hand.
+
+**Tenant pack active (from step 1c) — apply the org fragment + vendor standards
+(M3, ADR-034 §4).** Skip this whole block if 1c found no pack. Run both calls in
+one `bash -c` (bash-only lib; never `source` under zsh):
+```
+bash -c 'set -uo pipefail
+  source "<stack_repo>/scripts/lib/config-merger.sh"
+  source "<stack_repo>/scripts/lib/pack-lint.sh"
+  source "<stack_repo>/scripts/lib/project-pack-vendor.sh"
+  apply_project_claude_fragment "<pack_dir>" "./CLAUDE.md" || exit 1
+  vendor_tenant_standards "<pack_dir>" "."            || exit 1'
+```
+- `apply_project_claude_fragment` writes the pack's CLAUDE fragment into the
+  project `CLAUDE.md` under its own `<!-- ORG_OVERLAY_MANAGED -->` region
+  (idempotent; the core stack region is untouched). It runs even when a
+  `CLAUDE.md` already existed — it only replaces the overlay region.
+- `vendor_tenant_standards` copies each file in the pack's `standards` map into
+  the repo as **committed files** (preserving the pack-relative path, e.g.
+  `standards/security.md`), retiring the old symlink + LaunchAgent sync. It is
+  fail-closed and all-or-nothing: every source and destination is
+  realpath-containment + symlink checked before any write (a pack cannot escape
+  its dir or write outside the repo), malformed `standards` schema data hard-
+  fails, and a mid-copy failure rolls back the files already written — so a
+  partial/half-vendored tree never survives.
+- These vendored `standards/` files and the updated `CLAUDE.md` are **tracked**
+  — add them to the commit in the final step of this section.
 
 **Ensure the docs directory tree.** Create any missing:
 - `docs/ADRs/` — copy `~/.claude/templates/ADR.template.md` to
@@ -347,6 +411,8 @@ command for the user to run:
 git add .claude/stack-config.json CLAUDE.md docs/ .gitignore
 # if cloud-session support was set up, also stage:
 git add .claude/settings.json .claude/hooks/cloud-bootstrap.sh .claude/skills/
+# if a tenant pack vendored standards (step 1c / above), also stage:
+git add standards/
 git commit -m "chore: stack init at tier <N>"
 ```
 
