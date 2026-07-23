@@ -57,6 +57,20 @@ one pull request per repo, idempotently (skips repos already current).
 - A `.claude/.stack-bootstrap-version` stamp lets it skip up-to-date repos and
   refresh stale ones.
 
+## Job B — tenant pack distribution (optional)
+
+Job A above delivers the **stack bootstrap**. Job B delivers a **tenant pack's
+`standards/`** to that tenant's app repos when the pack bumps `pack_version`
+(ADR-034 §5). It runs in the same Action, after Job A.
+
+- **Opt-in.** Set `pack_repo` (the tenant pack's git URL) + `pack_topic` (the
+  topic tagging that tenant's app repos, e.g. `lade-tenant-carbonet`) in
+  `config.yml`. Empty `pack_repo` = Job B disabled; Job A still runs.
+- **Action:** re-vendors the pack's `standards/` into each tagged repo (reusing
+  `vendor_tenant_standards`) and stamps `.claude/.pack-version`.
+- Same guards as Job A: `enabled: false` forces dry-run, changes land as PRs, a
+  repo already on the current `pack_version` is skipped.
+
 ## Operating runbook
 
 Day-to-day tasks once it's live. All config edits are in `config.yml` on `main`;

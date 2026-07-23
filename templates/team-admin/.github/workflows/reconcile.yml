@@ -31,3 +31,9 @@ jobs:
           # manual runs default to dry-run for safety.
           DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}
         run: bash scripts/reconcile.sh
+
+      - name: Reconcile tenant pack updates (Job B)
+        env:
+          GH_TOKEN: ${{ secrets.STACK_RECONCILE_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}
+        run: bash scripts/reconcile-packs.sh
