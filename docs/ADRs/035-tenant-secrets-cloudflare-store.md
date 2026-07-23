@@ -78,8 +78,8 @@ Pages/Workers, R2 for storage). Options weighed:
 
 | Tenant   | CF account id                      | Secrets Store id                     |
 |----------|------------------------------------|--------------------------------------|
-| CarboNet | `c5cbef0790a4fe5ee0261e5307dd3859` | `cc2d18ce6031458697161aa9b6e84a89` (`default_secrets_store`) |
-| lade     | `0345fec753a46d6139ebfb504cf23e8c` | `14145bea73964663895df1a595bdc824`   |
+| CarboNet | `c0000000000000000000000000000001` | `c0000000000000000000000000000002` (`default_secrets_store`) |
+| lade     | `1ade0000000000000000000000000001` | `1ade0000000000000000000000000002`   |
 
 Each tenant store holds `<TENANT>_API_TOKEN`, `<TENANT>_ACCESS_KEY_ID`,
 `<TENANT>_SECRET_ACCESS_KEY`, `<TENANT>_S3_API_ENDPOINT`, all Workers-scoped, Active.
