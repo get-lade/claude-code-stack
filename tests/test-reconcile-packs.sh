@@ -44,7 +44,7 @@ cat > "$STUBS/gh" <<'EOF'
 #!/usr/bin/env bash
 case "${1:-}" in
   search) printf 'repo-a\nrepo-b\n'; exit 0 ;;
-  api)    exit 1 ;;
+  api)    echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;   # stamp absent → stale
 esac
 exit 0
 EOF
@@ -86,7 +86,7 @@ cat > "$STUBS/gh" <<'EOF'
 #!/usr/bin/env bash
 case "${1:-}" in
   search) printf 'repo-a\n'; exit 0 ;;
-  api)    printf '%s' "MS4yLjA="; exit 0 ;;   # base64("1.2.0")
+  api)    printf '{"content":"MS4yLjA="}'; exit 0 ;;   # base64("1.2.0")
 esac
 exit 0
 EOF
@@ -95,6 +95,38 @@ out3="$(PATH="$STUBS:$PATH" CONFIG="$CFG" STACK_REPO=https://example.invalid/sta
       GH_TOKEN=dummy DRY_RUN=false bash "$SCRIPT" 2>&1)"
 check "skips repo already on current version" "ok repo-a (current: 1.2.0)" "$out3"
 nocheck "current repo not flagged stale"      "needs pack update"          "$out3"
+
+# --- 4. Fail CLOSED: non-404 stamp lookup error → repo skipped, NOT stale ---
+cat > "$STUBS/gh" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+  search) printf 'repo-a\n'; exit 0 ;;
+  api)    echo "gh: HTTP 403 rate limit exceeded" >&2; exit 1 ;;
+esac
+exit 0
+EOF
+chmod +x "$STUBS/gh"
+out4="$(PATH="$STUBS:$PATH" CONFIG="$CFG" STACK_REPO=https://example.invalid/stack \
+      GH_TOKEN=dummy DRY_RUN=false bash "$SCRIPT" 2>&1)" || true   # exits 1 (a repo failed) by design
+check "fails closed on non-404 API error" "skipping to avoid fail-open" "$out4"
+nocheck "non-404 error not treated as stale" "needs pack update"        "$out4"
+
+# --- 5. Invalid tenant_id in pack → hard fail (no injected PR content) ------
+cat > "$FIX/pack/tenant.json" <<'EOF'
+{ "tenant_id": "Evil Corp [click here](http://x)", "pack_version": "1.0.0",
+  "github": {"org":"x"}, "standards": { "s": "standards/security.md" } }
+EOF
+# restore a normal search/api stub (must reach the tenant.json parse first anyway)
+cat > "$STUBS/gh" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in search) printf 'repo-a\n'; exit 0 ;; api) echo "Not Found" >&2; exit 1 ;; esac
+exit 0
+EOF
+chmod +x "$STUBS/gh"
+out5="$(PATH="$STUBS:$PATH" CONFIG="$CFG" STACK_REPO=https://example.invalid/stack \
+      GH_TOKEN=dummy DRY_RUN=false bash "$SCRIPT" 2>&1)" && rc5=0 || rc5=$?
+[ "$rc5" != "0" ] && echo "  [PASS] invalid tenant_id exits nonzero" || { echo "  [FAIL] invalid tenant_id exit $rc5"; failures=$((failures+1)); }
+check "rejects invalid tenant_id" "tenant_id not" "$out5"
 
 [ "$failures" -gt 0 ] && { echo "FAILED: $failures"; exit 1; }
 echo "PASS: reconcile-packs (Job B) tests passed."

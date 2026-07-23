@@ -35,6 +35,13 @@ DRY_RUN="${DRY_RUN:-false}"
 log() { printf '[reconcile-packs] %s\n' "$*"; }
 cfg() { sed -nE "s/^$1:[[:space:]]*//p" "$CONFIG" | head -n1 | tr -d '\r'; }
 
+# tenant_id: nonempty, [a-z0-9-] only, must start with a letter (matches the
+# pattern project-pack-vendor.sh enforces). pack_version: a conservative token
+# charset. Both flow into commit/PR text + the committed stamp, so a crafted
+# value from a malformed pack must not reach a human-read PR body verbatim.
+valid_token() { case "$1" in ''|*[!a-z0-9-]*) return 1 ;; [a-z]*) return 0 ;; *) return 1 ;; esac; }
+valid_ver()   { case "$1" in ''|*[!A-Za-z0-9._-]*) return 1 ;; *) return 0 ;; esac; }
+
 command -v jq >/dev/null 2>&1 || { log "ERROR: jq is required"; exit 1; }
 [ -f "$CONFIG" ] || { log "ERROR: $CONFIG not found"; exit 1; }
 
@@ -79,6 +86,8 @@ TENANT_ID="$(jq -r '.tenant_id // empty' "$PACK_DIR/tenant.json" 2>/dev/null || 
 PACK_VERSION="$(jq -r '.pack_version // empty' "$PACK_DIR/tenant.json" 2>/dev/null || true)"
 [ -n "$TENANT_ID" ]   || { log "ERROR: tenant.json missing tenant_id"; exit 1; }
 [ -n "$PACK_VERSION" ] || { log "ERROR: tenant.json missing pack_version"; exit 1; }
+valid_token "$TENANT_ID"  || { log "ERROR: tenant_id not [a-z][a-z0-9-]*: $TENANT_ID"; exit 1; }
+valid_ver   "$PACK_VERSION" || { log "ERROR: pack_version has invalid characters: $PACK_VERSION"; exit 1; }
 
 # No standards map → nothing for Job B to vendor.
 if ! jq -e '(.standards // {}) | length > 0' "$PACK_DIR/tenant.json" >/dev/null 2>&1; then
@@ -103,8 +112,25 @@ for repo in "${REPOS[@]}"; do
   [ -z "$repo" ] && continue
   if is_excluded "$repo"; then log "skip $repo (excluded)"; skipped=$((skipped + 1)); continue; fi
 
-  remote_ver="$(gh api "repos/$ORG/$repo/contents/.claude/.pack-version" \
-    --jq '.content' 2>/dev/null | base64 --decode 2>/dev/null | tr -d '[:space:]' || true)"
+  # Fail CLOSED on a stamp lookup error: only a genuine 404 (stamp absent) means
+  # "needs update". Any other API failure (403/5xx/rate-limit) must NOT be read
+  # as a missing stamp — that would fail open into a clone+force-push+PR against
+  # a repo that may already be current. Such repos are skipped as failures.
+  api_err="$WORKDIR/api-err"
+  # `|| api_rc=$?` keeps the script's own `set -e` from aborting on a non-zero
+  # gh exit (404 is expected) before we can classify it.
+  api_rc=0
+  resp="$(gh api "repos/$ORG/$repo/contents/.claude/.pack-version" 2>"$api_err")" || api_rc=$?
+  if [ "$api_rc" -ne 0 ]; then
+    if grep -qiE 'not found|http 404|status.*404' "$api_err"; then
+      remote_ver=""   # stamp genuinely absent → needs update
+    else
+      log "WARN: stamp lookup failed for $repo (API error, not 404) — skipping to avoid fail-open"
+      failed=$((failed + 1)); continue
+    fi
+  else
+    remote_ver="$(printf '%s' "$resp" | jq -r '.content' 2>/dev/null | base64 --decode 2>/dev/null | tr -d '[:space:]' || true)"
+  fi
   if [ "$remote_ver" = "$PACK_VERSION" ]; then
     log "ok $repo (current: $PACK_VERSION)"; skipped=$((skipped + 1)); continue
   fi
@@ -116,29 +142,46 @@ for repo in "${REPOS[@]}"; do
   if ! git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/$ORG/$repo.git" "$work" >/dev/null 2>&1; then
     log "WARN: clone failed $repo"; failed=$((failed + 1)); continue
   fi
-  if ( cd "$work"
-    default="$(git rev-parse --abbrev-ref HEAD)"
-    git checkout -B "$BRANCH" >/dev/null 2>&1
-    # Re-vendor the pack's standards/ into the app repo (idempotent overwrite of
-    # the vendored files; containment-checked inside vendor_tenant_standards).
-    vendor_tenant_standards "$PACK_DIR" "$work" || exit 4
-    mkdir -p .claude
-    printf '%s\n' "$PACK_VERSION" > .claude/.pack-version
-    git add standards .claude/.pack-version
+  # Run the mutate+push+PR in a subshell (to contain `cd`) with EXPLICIT `|| exit`
+  # on every fallible step, then capture the exit code separately. This subshell
+  # is NOT used as an `if` condition — that form disables errexit and would let a
+  # failed push still report "PR ready". Distinct codes: 2=git/setup, 3=no diff,
+  # 4=push failed, 5=PR neither created nor already open.
+  (
+    cd "$work" || exit 2
+    default="$(git rev-parse --abbrev-ref HEAD)" || exit 2
+    # Never force-push onto the repo's default branch — that bypasses the whole
+    # PR safety envelope. A pack_branch that equals default is a config error.
+    if [ "$BRANCH" = "$default" ]; then
+      echo "pack_branch '$BRANCH' equals default branch of $repo" >&2; exit 2
+    fi
+    git checkout -B "$BRANCH" >/dev/null 2>&1 || exit 2
+    # Re-vendor the pack's standards/ (idempotent overwrite; containment-checked
+    # inside vendor_tenant_standards). The explicit `git add standards ...` below
+    # is also the boundary that keeps a non-standards/ map entry out of the commit.
+    vendor_tenant_standards "$PACK_DIR" "$work" || exit 2
+    mkdir -p .claude || exit 2
+    printf '%s\n' "$PACK_VERSION" > .claude/.pack-version || exit 2
+    git add standards .claude/.pack-version || exit 2
+    git diff --cached --quiet && exit 3   # nothing changed → no PR needed
     git -c user.name='claude-stack-bot' -c user.email='claude-stack-bot@users.noreply.github.com' \
-      commit -q -m "chore: update $TENANT_ID standards to pack $PACK_VERSION" || exit 3
-    git push -f origin "$BRANCH" >/dev/null 2>&1
-    gh pr create --repo "$ORG/$repo" --base "$default" --head "$BRANCH" \
-      --title "Update $TENANT_ID standards to pack $PACK_VERSION" \
-      --body "Automated by the Claude Code Stack org reconciler (Job B, ADR-034 §5). Re-vendors the \`$TENANT_ID\` pack's \`standards/\` at pack version \`$PACK_VERSION\`." \
-      >/dev/null 2>&1 || true
-  ); then
-    log "PR ready: $repo"; changed=$((changed + 1))
-  else
-    rc=$?
-    if [ "$rc" = "3" ]; then log "ok $repo (no diff)"; skipped=$((skipped + 1))
-    else log "WARN: failed $repo (rc=$rc)"; failed=$((failed + 1)); fi
-  fi
+      commit -q -m "chore: update $TENANT_ID standards to pack $PACK_VERSION" || exit 2
+    git push --force-with-lease origin "$BRANCH" >/dev/null 2>&1 || exit 4
+    # Create the PR; if creation fails, only accept it when one is already open
+    # on this branch (idempotent re-run). Otherwise it's a real failure.
+    if ! gh pr create --repo "$ORG/$repo" --base "$default" --head "$BRANCH" \
+        --title "Update $TENANT_ID standards to pack $PACK_VERSION" \
+        --body "Automated by the Claude Code Stack org reconciler (Job B, ADR-034 §5). Re-vendors the \`$TENANT_ID\` pack's \`standards/\` at pack version \`$PACK_VERSION\`." \
+        >/dev/null 2>&1; then
+      gh pr list --repo "$ORG/$repo" --head "$BRANCH" --state open --json number \
+        --jq '.[0].number' 2>/dev/null | grep -q . || exit 5
+    fi
+    exit 0
+  )
+  rc=$?
+  if [ "$rc" = "0" ]; then log "PR ready: $repo"; changed=$((changed + 1))
+  elif [ "$rc" = "3" ]; then log "ok $repo (no diff)"; skipped=$((skipped + 1))
+  else log "WARN: failed $repo (rc=$rc)"; failed=$((failed + 1)); fi
 done
 
 log "done. changed=$changed skipped=$skipped failed=$failed dry_run=$DRY_RUN"
