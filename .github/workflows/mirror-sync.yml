@@ -35,6 +35,11 @@ jobs:
         with:
           app-id: ${{ vars.LADE_MIRROR_APP_ID }}
           private-key: ${{ secrets.LADE_MIRROR_APP_PRIVATE_KEY }}
+          # The App is installed on the tenant mirror repo, not on this source
+          # repo — without owner/repositories the action looks for the install
+          # here and 404s. Scope the minted token to the mirror.
+          owner: ${{ vars.LADE_MIRROR_OWNER }}
+          repositories: ${{ vars.LADE_MIRROR_REPO }}
 
       - name: Sync mirror
         env:
