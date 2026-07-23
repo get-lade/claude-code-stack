@@ -4,9 +4,9 @@ _Written: 2026-07-23 06:01 PT_
 
 ## Branch & state
 - Branch: `main` (worktree: N/A)
-- Uncommitted: the two handoff files only (this doc + its archive)
-- Behind/ahead of origin: **7 ahead, 0 behind** — all local, **sandbox could not
-  push**. First next step is to push `main` to `origin`.
+- Uncommitted: clean
+- Behind/ahead of origin: **up to date** — all three features + this handoff are
+  pushed to `origin/main` (commit `e1bf0b2`). CI on origin should be green.
 
 ## What shipped this session
 All three M3 next-steps built, cross-family reviewed to clear, and **merged into
@@ -30,11 +30,10 @@ Detail:
   GitHub App workflow. Gemini caught a real IP leak (ADR-035 CF IDs); closed.
 
 ## What's blocked & why
-- **Push to origin** — this sandbox cannot push to `main`. Nothing is on the
-  remote yet. You must `git push origin main` from your terminal.
+- Nothing blocked. All merged + pushed to `origin/main`.
 
 ## Exact next steps
-1. **Push:** `git push origin main` (7 commits). Confirm CI green on origin.
+1. **Confirm CI green** on `origin/main` (`gh run list` / Actions tab).
 2. **Clean up merged worktrees:**
    `git worktree remove .claude/worktrees/agent-a07a39dde750d63e8` and
    `git worktree remove .claude/worktrees/agent-a7b0389eab6823c29`
