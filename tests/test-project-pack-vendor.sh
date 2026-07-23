@@ -92,14 +92,14 @@ jq -e . "$CFG" >/dev/null || fail "stack-config.json is no longer valid JSON"
 
 PC="$REPO/CLAUDE.md"
 printf '# My project\n\nProject body.\n' > "$PC"
-apply_project_claude_fragment "$PACK" "$PC" || fail "apply_project_claude_fragment nonzero"
+apply_project_claude_fragment "$PACK" "$PC" "$REPO" || fail "apply_project_claude_fragment nonzero"
 grep -q '<!-- ORG_OVERLAY_MANAGED -->'  "$PC" || fail "overlay start marker missing"
 grep -q '<!-- /ORG_OVERLAY_MANAGED -->' "$PC" || fail "overlay end marker missing"
 grep -q 'ACME org overlay body.'        "$PC" || fail "fragment body not applied"
 grep -q 'Project body.'                 "$PC" || fail "project body was lost"
 
 # idempotent: second apply replaces the region, does not duplicate it
-apply_project_claude_fragment "$PACK" "$PC" || fail "second apply nonzero"
+apply_project_claude_fragment "$PACK" "$PC" "$REPO" || fail "second apply nonzero"
 n="$(grep -c '<!-- ORG_OVERLAY_MANAGED -->' "$PC")"
 [[ "$n" == "1" ]] || fail "overlay region duplicated on re-apply (count: $n)"
 
@@ -110,7 +110,7 @@ mkdir -p "$NOFRAG"
 echo '{ "tenant_id": "nofrag", "pack_version": "1.0.0", "github": {"org":"x"} }' > "$NOFRAG/tenant.json"
 PC2="$REPO/CLAUDE2.md"
 printf 'body only\n' > "$PC2"
-apply_project_claude_fragment "$NOFRAG" "$PC2" || fail "no-fragment case should succeed"
+apply_project_claude_fragment "$NOFRAG" "$PC2" "$REPO" || fail "no-fragment case should succeed"
 grep -q 'ORG_OVERLAY_MANAGED' "$PC2" && fail "no-fragment case should not add an overlay region"
 
 # --- 7. vendor_tenant_standards: mapped files land preserving pack-relative path
@@ -234,7 +234,7 @@ mkdir -p "$SYMFRAG"
 echo '{ "tenant_id": "symfrag", "pack_version": "1.0.0", "github": {"org":"x"} }' > "$SYMFRAG/tenant.json"
 ln -s "$SECRET" "$SYMFRAG/CLAUDE.fragment.md"
 PCSYM="$TMP/pcsym.md"; printf 'body\n' > "$PCSYM"
-if apply_project_claude_fragment "$SYMFRAG" "$PCSYM" >/dev/null 2>&1; then
+if apply_project_claude_fragment "$SYMFRAG" "$PCSYM" "$TMP" >/dev/null 2>&1; then
   fail "apply must reject a symlinked fragment source"
 fi
 grep -q 'TOP SECRET' "$PCSYM" && fail "symlinked fragment leaked outside content into CLAUDE.md"
@@ -286,7 +286,7 @@ PCN="$NEWSYM/CLAUDE.md"
 printf 'body\n' > "$PCN"
 OUTNEW="$TMP/outside-new-target"
 ln -s "$OUTNEW" "$PCN.new"     # pre-placed symlink at the predictable temp path
-if apply_project_claude_fragment "$PACK" "$PCN" >/dev/null 2>&1; then
+if apply_project_claude_fragment "$PACK" "$PCN" "$NEWSYM" >/dev/null 2>&1; then
   fail "apply must refuse when \$target.new is a pre-placed symlink (write-through)"
 fi
 [[ ! -e "$OUTNEW" ]] || fail "apply wrote through the .new symlink to outside the repo"
@@ -327,7 +327,7 @@ mkdir -p "$HN"
 PCHN="$HN/CLAUDE.md"
 printf 'body\n' > "$PCHN"
 printf 'squatter\n' > "$PCHN.new"    # pre-existing regular file (hardlink class)
-if apply_project_claude_fragment "$PACK" "$PCHN" >/dev/null 2>&1; then
+if apply_project_claude_fragment "$PACK" "$PCHN" "$HN" >/dev/null 2>&1; then
   fail "apply must refuse a pre-existing \$target.new (write-through risk)"
 fi
 
@@ -412,7 +412,7 @@ if [[ "$(id -u)" -ne 0 ]]; then
   # Must return non-zero PROMPTLY, not block on the FIFO read. Poll for exit;
   # if still alive after ~5s it HUNG -> that is a failure (distinct from a
   # prompt nonzero rejection, which is the pass condition).
-  ( apply_project_claude_fragment "$FIFO" "$PCFIFO" ) >/dev/null 2>&1 &
+  ( apply_project_claude_fragment "$FIFO" "$PCFIFO" "$TMP" ) >/dev/null 2>&1 &
   ap_pid=$!
   ap_hung=1
   for _i in $(seq 1 50); do
@@ -455,4 +455,16 @@ if vendor_tenant_standards "$XDIR" "$XREPO" >/dev/null 2>&1; then
   fail "vendor must reject a destination path that crosses a non-directory"
 fi
 
-echo "PASS: project-pack-vendor (28 cases)"
+# --- 29. apply_project_claude_fragment: target escapes repo via symlinked dir --
+
+AC="$TMP/acrepo"
+mkdir -p "$AC"
+ACOUT="$TMP/ac-outside"
+mkdir -p "$ACOUT"
+ln -s "$ACOUT" "$AC/nested"     # repo/nested -> outside the repo
+if apply_project_claude_fragment "$PACK" "$AC/nested/CLAUDE.md" "$AC" >/dev/null 2>&1; then
+  fail "apply must refuse a target that resolves outside the repo via a symlinked ancestor"
+fi
+[[ ! -e "$ACOUT/CLAUDE.md" ]] || fail "apply wrote outside the repo through a symlinked ancestor"
+
+echo "PASS: project-pack-vendor (29 cases)"

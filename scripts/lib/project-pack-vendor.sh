@@ -169,14 +169,17 @@ set_config_tenant_id() {
   mv "$tmp" "$config" || { rm -f "$tmp"; return 1; }
 }
 
-# apply_project_claude_fragment <pack_dir> <project_claude_md>
+# apply_project_claude_fragment <pack_dir> <project_claude_md> <repo_root>
 # Applies the pack's CLAUDE fragment to the PROJECT CLAUDE.md ORG_OVERLAY_MANAGED
 # region (marker-region replace, idempotent — ADR-013 amendment #3). No-op with
 # success if the pack ships no fragment file. Refuses a symlinked fragment
-# source (would read outside the pack) or a symlinked project CLAUDE.md target
-# (would write outside the repo).
+# source (would read outside the pack) or a project CLAUDE.md target that is a
+# symlink or resolves outside repo_root (would write outside the repo) — same
+# containment guard set_config_tenant_id applies to its writes.
 apply_project_claude_fragment() {
-  local pack_dir="$1" project_claude="$2"
+  local pack_dir="$1" project_claude="$2" repo_root="$3"
+
+  [[ -n "$repo_root" ]] || { echo "  [pack-vendor-fail] apply_project_claude_fragment requires repo_root" >&2; return 1; }
 
   local fragment_rel
   fragment_rel="$(jq -r '.claude_fragment_path // "CLAUDE.fragment.md"' "$pack_dir/tenant.json" 2>/dev/null)" || return 1
@@ -198,9 +201,11 @@ apply_project_claude_fragment() {
     return 1
   fi
 
-  # Refuse to follow a symlinked target out of the repo.
-  if [[ -L "$project_claude" ]]; then
-    echo "  [pack-vendor-fail] project CLAUDE.md is a symlink; refusing to write through it: $project_claude" >&2
+  # Refuse a symlinked target, or one whose nearest existing ancestor resolves
+  # outside the repo — a later touch/write must not climb out via a symlinked
+  # ancestor. _ppv_dest_safe covers both the symlink and the containment case.
+  if ! _ppv_dest_safe "$project_claude" "$repo_root"; then
+    echo "  [pack-vendor-fail] project CLAUDE.md is a symlink or resolves outside the repo: $project_claude" >&2
     return 1
   fi
   # apply_org_overlay_section writes through a predictable "$target.new" temp;

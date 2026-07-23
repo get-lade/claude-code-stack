@@ -269,8 +269,8 @@ bash -c 'set -uo pipefail
   source "<stack_repo>/scripts/lib/config-merger.sh"
   source "<stack_repo>/scripts/lib/pack-lint.sh"
   source "<stack_repo>/scripts/lib/project-pack-vendor.sh"
-  apply_project_claude_fragment "<pack_dir>" "./CLAUDE.md" || exit 1
-  vendor_tenant_standards "<pack_dir>" "."            || exit 1'
+  apply_project_claude_fragment "<pack_dir>" "./CLAUDE.md" "." || exit 1
+  vendor_tenant_standards "<pack_dir>" "."                 || exit 1'
 ```
 - `apply_project_claude_fragment` writes the pack's CLAUDE fragment into the
   project `CLAUDE.md` under its own `<!-- ORG_OVERLAY_MANAGED -->` region
