@@ -108,7 +108,16 @@ resolve_store_id() {
     return 1
   fi
 
-  jq -r '.result[0].id' <<<"$resp"
+  local store_id
+  store_id="$(jq -r '.result[0].id' <<<"$resp")" || return 1
+  # Defense-in-depth: this id is interpolated into a follow-up API URL and
+  # into the emitted wrangler TOML — validate the shape before either use,
+  # even though it came from the CF API rather than tenant.json.
+  if [[ ! "$store_id" =~ ^[0-9a-f]{32}$ ]]; then
+    echo "  [bind-fail] Secrets Store id from the CF API is not a 32-hex id: ${store_id:0:40}" >&2
+    return 1
+  fi
+  echo "$store_id"
 }
 
 # Preflight gate: every expected name must exist in the store. The name→id
@@ -174,6 +183,25 @@ replace_secrets_region() {
   local marker="# STACK_SECRETS_MANAGED"
   local end_marker="# /STACK_SECRETS_MANAGED"
 
+  # Refuse a symlinked target — reading/writing through it can disclose an
+  # arbitrary local file into the committed TOML, or clobber one via the
+  # dangling-symlink-plus-create case. -L catches dangling links too (-e
+  # would follow the link and report false on a broken one).
+  if [[ -L "$target" ]]; then
+    echo "  [bind-fail] $target is a symlink — refusing to read/write through it" >&2
+    return 1
+  fi
+  if [[ -e "$target" && ! -f "$target" ]]; then
+    echo "  [bind-fail] $target exists and is not a regular file" >&2
+    return 1
+  fi
+
+  # In-dir mktemp (not a predictable "$target.new") + `mv --`: avoids a
+  # racy/predictable temp path and stops "$target" from being parsed as an
+  # option if it ever started with a dash.
+  local tmp
+  tmp="$(mktemp "$(dirname -- "$target")/.stack_secrets.XXXXXX")" || return 1
+
   if grep -qxF "$marker" "$target" 2>/dev/null; then
     # Exactly one well-ordered pair — duplicate, missing, or out-of-order
     # markers would make the awk state machine silently drop real config.
@@ -184,6 +212,7 @@ replace_secrets_region() {
     end_line="$(grep -nxF "$end_marker" "$target" | head -1 | cut -d: -f1)"
     if [[ "$starts" != 1 || "$ends" != 1 || "$start_line" -ge "${end_line:-0}" ]]; then
       echo "  [bind-fail] $target has a malformed STACK_SECRETS_MANAGED region (need exactly one start/end pair, start before end)" >&2
+      rm -f "$tmp"
       return 1
     fi
     awk -v source="$content_file" -v marker="$marker" -v end_marker="$end_marker" '
@@ -191,8 +220,8 @@ replace_secrets_region() {
       $0 == end_marker { in_section = 0; print; next }
       $0 == marker { in_section = 1; print; while ((getline line < source) > 0) print line; next }
       !in_section { print }
-    ' "$target" > "$target.new" || return 1
-    mv "$target.new" "$target" || return 1
+    ' "$target" > "$tmp" || { rm -f "$tmp"; return 1; }
+    mv -- "$tmp" "$target" || { rm -f "$tmp"; return 1; }
   else
     # Build-to-temp then atomic mv — a mid-write failure must not leave an
     # unclosed managed region in the committed config.
@@ -202,8 +231,8 @@ replace_secrets_region() {
       echo "$marker"
       cat "$content_file"
       echo "$end_marker"
-    } > "$target.new" || { rm -f "$target.new"; return 1; }
-    mv "$target.new" "$target" || return 1
+    } > "$tmp" || { rm -f "$tmp"; return 1; }
+    mv -- "$tmp" "$target" || { rm -f "$tmp"; return 1; }
   fi
 }
 
@@ -234,8 +263,8 @@ bind_tenant_secrets() {
   # .secrets must be an array — a malformed field must fail closed, never
   # read as "no secrets declared" (that would be a silent zero-bindings
   # deploy). Explicitly empty [] is the only legitimate no-op.
-  if ! jq -e '(.secrets // []) | type == "array"' "$tenant_json" >/dev/null 2>&1; then
-    echo "  [bind-fail] tenant.json .secrets is not an array — refusing to treat as empty" >&2
+  if ! jq -e 'has("secrets") and (.secrets | type == "array")' "$tenant_json" >/dev/null 2>&1; then
+    echo "  [bind-fail] tenant.json is missing .secrets or .secrets is not an array — refusing to treat as empty (declare \"secrets\": [] explicitly for a tenant with none)" >&2
     return 1
   fi
 
@@ -280,7 +309,10 @@ bind_tenant_secrets() {
   local block
   block="$(mktemp)" || return 1
   emit_secret_bindings "$store_id" "${names[@]}" > "$block" || { rm -f "$block"; return 1; }
-  touch "$wrangler_toml" || { rm -f "$block"; return 1; }
+  # No pre-emptive touch here on purpose: touching through a dangling
+  # symlink would create the file at the resolved target path before
+  # replace_secrets_region's symlink guard ever runs. It handles a
+  # not-yet-existing target itself.
   replace_secrets_region "$block" "$wrangler_toml" || { rm -f "$block"; return 1; }
   rm -f "$block"
 
