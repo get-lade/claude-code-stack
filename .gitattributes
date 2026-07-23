@@ -1,0 +1,65 @@
+# Mirror-sync scrub allowlist (ADR-036 Job A, docs/ADRs/036-stack-distribution-model.md).
+#
+# `export-ignore` tells `git archive` to omit the matching paths from any
+# archive it produces. scripts/mirror-sync.sh builds the tenant-mirror
+# snapshot via `git archive`, so this file is the normative "never leaves
+# lade" boundary for that path.
+#
+# DENY-BY-DEFAULT (owner decision, post cross-family review): everything is
+# export-ignored, then the known-safe installable-core set is explicitly
+# opted back in with `-export-ignore`. An earlier allowlist-by-exclusion
+# version of this file missed docs/ADRs/** (which carries live Cloudflare
+# account/store IDs, e.g. ADR-035) and .claude/** (stack-config.json,
+# settings.json) — both would have shipped to every tenant mirror unscrubbed.
+# Deny-by-default means a NEW top-level path added to the repo is excluded
+# by default and must be deliberately opted in here, not the other way
+# around. scripts/lib/mirror-scrub.sh re-checks a subset of this as a
+# second, defense-in-depth guard against a misconfigured or bypassed
+# .gitattributes — keep the two in sync if either changes.
+#
+# Completeness of the opt-in list below is verified mechanically:
+# tests/test-mirror-sync.sh runs scripts/install.sh against the archived
+# tree in a scratch $HOME and asserts it succeeds.
+
+* export-ignore
+
+# Installable core only — everything scripts/install.sh reads to install a
+# tier (tier manifests reference agents/, config/, hooks/, lib/, schemas/,
+# skills/, templates/; install.sh itself sources scripts/lib/*.sh and calls
+# scripts/backup.sh + scripts/verify.sh). tests/ and the repo's own
+# README/LICENSE ship for a complete, buildable mirror; nothing else does.
+#
+# Each directory needs BOTH its own bare-path line and a /** line: `git
+# archive` decides whether to descend into a directory based on the
+# directory path's own attribute, not its files' — `/scripts/** -export-ignore`
+# alone leaves the "scripts" entry itself export-ignore=true (inherited from
+# the `*` blanket above) and git archive prunes the whole subtree before it
+# ever evaluates the per-file override. Verified empirically; do not drop
+# either line.
+/agents -export-ignore
+/agents/** -export-ignore
+/config -export-ignore
+/config/** -export-ignore
+/hooks -export-ignore
+/hooks/** -export-ignore
+/lib -export-ignore
+/lib/** -export-ignore
+/schemas -export-ignore
+/schemas/** -export-ignore
+/scripts -export-ignore
+/scripts/** -export-ignore
+/skills -export-ignore
+/skills/** -export-ignore
+/templates -export-ignore
+/templates/** -export-ignore
+/tests -export-ignore
+/tests/** -export-ignore
+/README.md -export-ignore
+/LICENSE -export-ignore
+
+# Everything else stays excluded by the blanket rule above, explicitly
+# including (not exhaustive — deny-by-default covers anything not listed
+# above regardless): docs/** (ADRs, plans, handoffs — internal design
+# history, some with live tenant identifiers), .claude/** (session state,
+# stack-config.json, settings.json), .github/** (internal CI workflows,
+# not needed to consume the mirror), .claude-plugin/**, .env*.
