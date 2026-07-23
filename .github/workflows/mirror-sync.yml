@@ -22,6 +22,10 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    # Stays inert until the lade GitHub App is provisioned. Without this guard
+    # the create-github-app-token step errors ("Input required: app-id") and
+    # red-Xs every push to main.
+    if: ${{ vars.LADE_MIRROR_APP_ID != '' }}
     steps:
       - uses: actions/checkout@v4
 

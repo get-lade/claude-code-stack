@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-21T22:39:56Z",
+  "generated_at": "2026-07-23T18:42:32Z",
   "stack_version": "1.1.5",
   "capabilities": [
     {
@@ -594,6 +594,19 @@
       "invocation": {
         "slash": "/project-init",
         "natural_language": "initialize a project for use with the Claude Code Stack"
+      },
+      "tier_min": 0,
+      "user_invocable": true,
+      "model_invocable": true,
+      "recommendable": true
+    },
+    {
+      "id": "publish",
+      "kind": "skill",
+      "summary": "Deploy the current project to Cloudflare, binding the tenant's Secrets Store secrets into wrangler.toml first so a missing/misconfigured secret hard-aborts the deploy instead of shipping without it (ADR-035).",
+      "invocation": {
+        "slash": "/publish",
+        "natural_language": "deploy the current project to Cloudflare, binding the tenant's Secrets Store secrets into wrangler.toml first so a missing/misconfigured secret hard-aborts the deploy instead of shipping without it (ADR-035)"
       },
       "tier_min": 0,
       "user_invocable": true,
